@@ -13,49 +13,52 @@ import { AlertTriangle, CloudOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface WeatherInfoComponentProps {
-  apiKey: string | null;
+  // apiKey: string | null; // REMOVED
   coords: Coordinates | null;
   activeDroneProfile: DroneProfile;
 }
 
-async function fetchWeather(apiKey: string, coords: Coordinates): Promise<MeteosourceResponse> {
+// MODIFIED fetchWeather function
+async function fetchWeather(coords: Coordinates): Promise<MeteosourceResponse> {
   const { lat, lng } = coords;
+  // Note: URL is now relative to your own application
   const response = await fetch(
-    `https://www.meteosource.com/api/v1/free/point?lat=${lat}&lon=${lng}&sections=current,hourly&language=fr&units=metric&key=${apiKey}`
+    `/api/weather?lat=${lat}&lon=${lng}`
   );
   if (!response.ok) {
-    if (response.status === 429) { // Too many requests
-      throw new Error('API rate limit exceeded. Please try again later or check your Meteosource plan.');
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch weather data from your API route.' }));
+    // You might want to customize error messages based on status codes from your API route
+    if (response.status === 500 && errorData.error?.includes('API key is not configured')) {
+        throw new Error('The weather service is not configured on the server. Please contact the administrator.');
     }
-    if (response.status === 401 || response.status === 403) { // Unauthorized or Forbidden
-      throw new Error('Invalid or unauthorized API key. Please check your Meteosource API key.');
-    }
-    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch weather data.' }));
-    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    throw new Error(errorData.error || errorData.message || `API route error! status: ${response.status}`);
   }
   return response.json();
 }
 
-export default function WeatherInfoComponent({ apiKey, coords, activeDroneProfile }: WeatherInfoComponentProps) {
+export default function WeatherInfoComponent({ /* apiKey, */ coords, activeDroneProfile }: WeatherInfoComponentProps) { // Remove apiKey from props
   const { toast } = useToast();
   const [safetyAssessment, setSafetyAssessment] = useState<SafetyAssessment | null>(null);
   const [isAssessingSafety, setIsAssessingSafety] = useState(false);
 
-  const queryKey = useMemo(() => ['weather', apiKey, coords], [apiKey, coords]);
+  // MODIFIED queryKey
+  const queryKey = useMemo(() => ['weather', coords], [coords]); // apiKey removed
 
   const { data: weatherData, isLoading, error, isFetching } = useQuery<MeteosourceResponse, Error>({
     queryKey: queryKey,
     queryFn: () => {
-      if (!apiKey) throw new Error('API key is missing.');
+      // if (!apiKey) throw new Error('API key is missing.'); // REMOVE THIS LINE
       if (!coords) throw new Error('Coordinates are missing.');
-      return fetchWeather(apiKey, coords);
+      return fetchWeather(coords); // apiKey no longer passed
     },
-    enabled: !!apiKey && !!coords,
+    enabled: !!coords, // apiKey no longer a condition
     staleTime: 1000 * 60 * 15, // 15 minutes
     gcTime: 1000 * 60 * 30, // 30 minutes
     retry: (failureCount, error) => {
-      // Don't retry for auth errors or rate limit
-      if (error.message.includes('API key') || error.message.includes('rate limit')) {
+      // Don't retry for auth errors or rate limit - API key errors are now server-side or generic client-side.
+      // Consider if specific client-side error messages warrant no retries.
+      // For example, if the error is "The weather service is not configured on the server...", retrying won't help.
+      if (error.message.includes('weather service is not configured')) {
         return false;
       }
       return failureCount < 2; // Retry twice for other errors
@@ -112,15 +115,16 @@ export default function WeatherInfoComponent({ apiKey, coords, activeDroneProfil
     }
   }, [weatherData, activeDroneProfile, toast]);
 
-  if (!apiKey) {
-    return (
-      <Alert variant="default" className="mt-6 shadow-md">
-        <AlertTriangle className="h-5 w-5" />
-        <AlertTitle>API Key Required</AlertTitle>
-        <AlertDescription>Please enter your Meteosource API key to view weather information.</AlertDescription>
-      </Alert>
-    );
-  }
+  // REMOVED API KEY CHECK BLOCK
+  // if (!apiKey) {
+  //   return (
+  //     <Alert variant="default" className="mt-6 shadow-md">
+  //       <AlertTriangle className="h-5 w-5" />
+  //       <AlertTitle>API Key Required</AlertTitle>
+  //       <AlertDescription>Please enter your Meteosource API key to view weather information.</AlertDescription>
+  //     </Alert>
+  //   );
+  // }
 
   if (!coords) {
     return (
