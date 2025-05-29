@@ -1,4 +1,3 @@
-    /* @import 'leaflet/dist/leaflet.css'; */ /* LIGNE À SUPPRIMER OU COMMENTER */
 
     @tailwind base;
     @tailwind components;
@@ -91,11 +90,3 @@
         @apply bg-background text-foreground;
       }
     }
-
-    /* Leaflet map container height fix - CETTE RÈGLE PEUT ÊTRE SUPPRIMÉE */
-    /* .leaflet-container {
-      height: 100%;
-      width: 100%;
-      border-radius: var(--radius);
-    } */
-    
