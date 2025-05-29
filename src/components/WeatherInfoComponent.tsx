@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Coordinates, DroneProfile, MeteosourceResponse, SafetyAssessment } from '@/types';
+import type { Coordinates, DroneProfile, UnifiedWeatherResponse, SafetyAssessment, UnifiedCurrentWeatherData } from '@/types';
 import { assessDroneSafety } from '@/ai/flows/assess-drone-safety';
 import CurrentWeather from './CurrentWeather';
 import HourlyForecastList from './HourlyForecastList';
@@ -18,7 +18,7 @@ interface WeatherInfoComponentProps {
   activeDroneProfile: DroneProfile;
 }
 
-async function fetchWeather(coords: Coordinates): Promise<MeteosourceResponse> {
+async function fetchWeather(coords: Coordinates): Promise<UnifiedWeatherResponse> {
   const { lat, lng } = coords;
   const response = await fetch(
     `/api/weather?lat=${lat}&lon=${lng}`
@@ -39,7 +39,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
 
   const queryKey = useMemo(() => ['weather', coords], [coords]);
 
-  const { data: weatherData, isLoading, error, isFetching, isError } = useQuery<MeteosourceResponse, Error>({
+  const { data: weatherData, isLoading, error, isFetching, isError } = useQuery<UnifiedWeatherResponse, Error>({
     queryKey: queryKey,
     queryFn: () => {
       if (!coords) throw new Error('Les coordonnées sont manquantes.');
@@ -49,11 +49,10 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     staleTime: 1000 * 60 * 15, // 15 minutes
     gcTime: 1000 * 60 * 30, // 30 minutes
     retry: (failureCount, errorInstance) => {
-      if (errorInstance.message.includes('service météo n\'est pas configuré') ||
-          errorInstance.message.includes('Erreur Meteosource :') || 
+      if (errorInstance.message.includes('Service météo principal indisponible') ||
           errorInstance.message.includes('Coordonnées invalides') ||
-          errorInstance.message.includes('paramètre invalide')) {
-        return false;
+          errorInstance.message.includes('Échec de la récupération des données météo')) {
+        return false; 
       }
       return failureCount < 2;
     },
@@ -74,86 +73,69 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     if (weatherData?.current && activeDroneProfile) {
       const performAssessment = async () => {
         setIsAssessingSafety(true);
-        setSafetyAssessment(null); // Reset assessment at the beginning
+        setSafetyAssessment(null); 
 
-        const currentData = weatherData.current;
+        const currentData = weatherData.current as UnifiedCurrentWeatherData; // Assert type for easier access
         
         const tempIsValid = typeof currentData.temp === 'number';
-        // Wind speed is required by schema, but less critical if gusts are the main safety factor with temp
-        const windSpeedIsValid = currentData.wind && typeof currentData.wind.speed === 'number';
-        const windGustIsValid = currentData.wind && typeof currentData.wind.gust === 'number';
+        const windSpeedIsValid = typeof currentData.wind?.speed === 'number';
+        const windGustIsValid = typeof currentData.wind?.gust === 'number';
+        const cloudCoverIsValid = typeof currentData.cloud_cover?.total === 'number';
+        const visibilityIsValid = typeof currentData.visibility?.total === 'number';
+        // cloudBaseHeight is optional for AI
 
-        if (!tempIsValid || !windGustIsValid) {
-          let missingFields = [];
+        if (!tempIsValid || !windSpeedIsValid || !windGustIsValid || !cloudCoverIsValid || !visibilityIsValid) {
+          let missingFields: string[] = [];
           if (!tempIsValid) missingFields.push("température actuelle");
+          if (!windSpeedIsValid) missingFields.push("vitesse du vent actuelle");
           if (!windGustIsValid) missingFields.push("rafales de vent actuelles");
+          if (!cloudCoverIsValid) missingFields.push("couverture nuageuse");
+          if (!visibilityIsValid) missingFields.push("visibilité");
           
-          const warningMessage = `AI Safety Assessment: Données météo essentielles (${missingFields.join(', ')}) manquantes ou invalides. Impossible de procéder à une évaluation complète.`;
-          console.warn(warningMessage, currentData);
+          const warningMessage = `AI Safety Assessment: Critical weather data (${missingFields.join(', ')}) is missing or invalid. Cannot proceed with a reliable safety assessment. Data received: ${JSON.stringify(currentData)}`;
+          console.warn(warningMessage);
           
           toast({
-            title: "Évaluation de sécurité limitée",
-            description: `Données météo essentielles (${missingFields.join(' et ')}) manquantes. Impossible d'évaluer la sécurité du vol de manière fiable.`,
+            title: "Évaluation de sécurité impossible",
+            description: `Données météo essentielles (${missingFields.join(', ')}) manquantes pour une évaluation fiable.`,
             variant: "destructive",
           });
           setSafetyAssessment({
             safeToFly: false,
             indicatorColor: 'RED',
-            message: `Données météo essentielles (${missingFields.join(' et ')}) manquantes. Impossible d'évaluer la sécurité du vol de manière fiable.`,
+            message: `Données météo (${missingFields.join(', ')}) manquantes. Impossible d'évaluer la sécurité du vol.`,
           });
           setIsAssessingSafety(false);
           return; 
         }
 
-        // Ensure windSpeedIsValid as well if it's strictly required, otherwise allow assessment
-        // For now, assessDroneSafety requires windSpeed.
-        if (!windSpeedIsValid) {
-           console.warn(
-            `AI Safety Assessment: Vitesse du vent actuelle manquante ou invalide. Evaluation de sécurité AI sera basée sur les autres paramètres.`,
-            currentData
-          );
-           // Decide if you still want to call the AI or set a RED status.
-           // For now, let's assume if temp & gust are fine, but speed is missing, it's still too risky.
-           // Or, we can make windSpeed optional in the AI schema if it's not critical.
-           // Let's err on the side of caution for now.
-           toast({
-            title: "Évaluation de sécurité limitée",
-            description: "Vitesse du vent actuelle manquante. Impossible d'évaluer la sécurité du vol de manière fiable.",
-            variant: "destructive",
-          });
-          setSafetyAssessment({
-            safeToFly: false,
-            indicatorColor: 'RED',
-            message: 'Vitesse du vent actuelle manquante. Impossible d\'évaluer la sécurité du vol de manière fiable.',
-          });
-          setIsAssessingSafety(false);
-          return;
-        }
-
-
         try {
+          // All required fields are asserted to be numbers here due to the check above
           const assessmentInput = {
-            temperature: currentData.temp, // Known to be a number here
-            windSpeed: currentData.wind.speed, // Known to be a number here
-            windGust: currentData.wind.gust, // Known to be a number here
-            precipitationType: currentData.precipitation?.type || "none", // Default to "none" if undefined
+            temperature: currentData.temp as number, 
+            windSpeed: currentData.wind?.speed as number,
+            windGust: currentData.wind?.gust as number,
+            precipitationType: currentData.precipitation?.type || "none",
             maxWindSpeed: activeDroneProfile.maxWindSpeed,
             minTemperature: activeDroneProfile.minTemp,
             maxTemperature: activeDroneProfile.maxTemp,
+            cloudCover: currentData.cloud_cover?.total as number,
+            visibility: currentData.visibility?.total as number, // in meters
+            cloudBaseHeight: currentData.cloud_base_height ?? null, // can be null
           };
           const assessmentResult = await assessDroneSafety(assessmentInput);
           setSafetyAssessment(assessmentResult);
         } catch (e: any) {
-          console.error("L'évaluation de la sécurité a échoué:", e);
+          console.error("L'évaluation de la sécurité a échoué (Genkit call):", e);
           toast({
-            title: "Erreur d'évaluation de la sécurité",
+            title: "Erreur d'évaluation de la sécurité IA",
             description: e.message || "Impossible d'évaluer la sécurité du drone pour le moment.",
             variant: "destructive",
           });
           setSafetyAssessment({
             safeToFly: false,
             indicatorColor: 'RED',
-            message: 'Erreur lors de l\'évaluation de la sécurité. Les conditions pourraient être inadaptées.'
+            message: 'Erreur lors de l\'évaluation IA de la sécurité. Les conditions pourraient être inadaptées.'
           });
         } finally {
           setIsAssessingSafety(false);
@@ -161,9 +143,19 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
       };
       performAssessment();
     } else {
-      setSafetyAssessment(null);
+      // Reset assessment if no weather data or profile
+      setSafetyAssessment(null); 
+      if(weatherData && !weatherData.current){
+        console.warn("Weather data fetched, but current weather details are missing.");
+         toast({
+            title: "Données météo actuelles manquantes",
+            description: "Impossible de récupérer les conditions météo actuelles pour ce lieu.",
+            variant: "destructive",
+          });
+      }
     }
-  }, [weatherData, activeDroneProfile, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weatherData, activeDroneProfile]); // Removed toast from dependencies to avoid loops if toast causes re-renders
 
   if (!coords) {
     return (
@@ -176,7 +168,6 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
   }
   
   const showLoadingSkeleton = isLoading || isFetching || (weatherData?.current && isAssessingSafety && !safetyAssessment);
-
 
   if (showLoadingSkeleton) {
     return (
@@ -195,7 +186,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
         <AlertTitle>Erreur de données météo</AlertTitle>
         <AlertDescription>
           Impossible de charger les informations météo pour le lieu sélectionné.
-          Veuillez vérifier votre connexion ou réessayer plus tard. Message: {error.message}
+          Veuillez vérifier votre connexion ou réessayer plus tard. Détail: {error.message}
         </AlertDescription>
       </Alert>
     );
@@ -207,8 +198,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
         <CloudOff className="h-5 w-5" />
         <AlertTitle>Aucune donnée météo actuelle</AlertTitle>
         <AlertDescription>
-          Aucune donnée météo actuelle n'a été trouvée pour le lieu sélectionné. 
-          Cela peut arriver si l'API ne fournit pas de données pour ce point précis.
+          Aucune donnée météo actuelle n'a été trouvée pour le lieu sélectionné ou les données sont incomplètes.
         </AlertDescription>
       </Alert>
     );
@@ -226,4 +216,3 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     </div>
   );
 }
-
