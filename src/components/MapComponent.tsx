@@ -1,9 +1,8 @@
 
 "use client";
 
-import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, Circle } from 'react-leaflet';
-import type { LatLngExpression, Map as LeafletMap } from 'leaflet'; // Aliased to LeafletMap
+import type { LatLngExpression } from 'leaflet';
 import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
@@ -36,36 +35,11 @@ function LocationMarker({ selectedCoords, onCoordsChange }: MapComponentProps) {
 
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
-  const mapRef = useRef<LeafletMap | null>(null); // Use aliased LeafletMap type
   const position: LatLngExpression = selectedCoords
     ? [selectedCoords.lat, selectedCoords.lng]
     : [BELGIUM_CENTER.lat, BELGIUM_CENTER.lng];
 
   const zoom = selectedCoords ? DEFAULT_MAP_ZOOM + 2 : DEFAULT_MAP_ZOOM;
-
-  // Effect to fly to new coordinates when selectedCoords changes externally
-  useEffect(() => {
-    if (selectedCoords && mapRef.current) {
-      // Ensure flyTo method exists before calling
-      if (typeof mapRef.current.flyTo === 'function') {
-        mapRef.current.flyTo([selectedCoords.lat, selectedCoords.lng], mapRef.current.getZoom());
-      }
-    }
-  }, [selectedCoords]);
-
-  // Effect for managing map instance lifecycle
-  useEffect(() => {
-    // This effect's cleanup function will be called when MapComponent unmounts.
-    return () => {
-      if (mapRef.current) {
-        // Ensure remove method exists before calling
-        if (typeof mapRef.current.remove === 'function') {
-          mapRef.current.remove();
-        }
-        mapRef.current = null; // Clear the ref after removing the map
-      }
-    };
-  }, []); // Empty dependency array: runs on mount, cleans up on unmount.
 
   return (
     <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden" data-ai-hint="interactive map">
@@ -74,9 +48,8 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         zoom={zoom}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
-        whenCreated={(mapInstance) => {
-          mapRef.current = mapInstance;
-        }}
+        // No whenCreated, mapRef, or manual lifecycle useEffects needed here now.
+        // MapContainer will update its view based on changes to `center` and `zoom` props.
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
