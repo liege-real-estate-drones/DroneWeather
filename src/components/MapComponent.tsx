@@ -2,7 +2,7 @@
 "use client";
 
 import { MapContainer, TileLayer, Circle, Marker, useMapEvents } from 'react-leaflet';
-import type { LatLngExpression, Map as LeafletMapType } from 'leaflet'; // Aliased import
+import type { LatLngExpression, Map as LeafletMapType } from 'leaflet';
 import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
@@ -12,7 +12,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 // Fix for default icon path issue with Webpack, made idempotent for HMR
 if (typeof window !== 'undefined') {
   const proto = L.Icon.Default.prototype as any;
-  // Only delete if it exists, to avoid errors on subsequent HMR runs if already deleted
   if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) {
     delete proto._getIconUrl;
   }
@@ -28,8 +27,7 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-// Define LocationMarkerComponent outside MapComponent for clarity
-function LocationMarkerComponent({
+function LocationMarker({
   currentSelectedCoords,
   onCoordsChange,
 }: {
@@ -50,37 +48,60 @@ function LocationMarkerComponent({
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
-  const mapRef = useRef<LeafletMapType | null>(null); 
-
-  // This key changes on HMR, forcing React to unmount/remount the keyed components.
-  // It also ensures a new map DOM ID is generated.
+  const mapRef = useRef<LeafletMapType | null>(null);
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
-  
+
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Effect to manually remove the map instance on unmount or when mapInstanceKey changes (HMR)
   useEffect(() => {
-    const currentMapInstance = mapRef.current;
-    // The cleanup function is called when the component unmounts
-    // or BEFORE this effect re-runs if mapInstanceKey changes.
+    const mapInstanceToClean = mapRef.current; 
+    const effectKey = mapInstanceKey; // Capture the key for this effect instance
+
+    if (mapInstanceToClean) {
+      const container = mapInstanceToClean.getContainer();
+      console.log(`[MapEffect ${effectKey}] Setup. Map instance exists. Container _leaflet_id: ${container?._leaflet_id}`);
+    } else {
+      console.log(`[MapEffect ${effectKey}] Setup. No map instance at ref yet.`);
+    }
+
     return () => {
-      if (currentMapInstance) {
+      console.log(`[MapEffect ${effectKey}] Cleanup starting for key ${effectKey}.`);
+      if (mapInstanceToClean) {
         try {
-          // console.log('Attempting to remove map instance for key:', mapInstanceKey, currentMapInstance);
-          currentMapInstance.remove(); // Call Leaflet's cleanup
+          const container = mapInstanceToClean.getContainer();
+          const leafletIdBeforeRemove = container?._leaflet_id;
+          console.log(`[MapEffect ${effectKey}] Attempting to remove map. Container _leaflet_id BEFORE remove: ${leafletIdBeforeRemove}`);
+          
+          mapInstanceToClean.remove(); 
+          
+          const leafletIdAfterRemove = container?._leaflet_id;
+          console.log(`[MapEffect ${effectKey}] Map remove() called. Container _leaflet_id AFTER remove: ${leafletIdAfterRemove}`);
+
+          if (container && container._leaflet_id) {
+            console.warn(`[MapEffect ${effectKey}] _leaflet_id still present on container after remove(). This might be the issue.`);
+          }
+
         } catch (e) {
-          console.error('Error removing map instance:', e);
+          console.error(`[MapEffect ${effectKey}] Error removing map instance:`, e);
         }
+      } else {
+        console.log(`[MapEffect ${effectKey}] Cleanup: No map instance was captured by this effect to clean.`);
       }
-      // If the ref still points to the instance we captured, nullify it.
-      // This might be redundant if the component instance is fully replaced by key change.
-      if (mapRef.current === currentMapInstance) {
+
+      // Nullify the ref only if it still points to the instance we just cleaned up.
+      // This helps prevent issues if a new map instance was somehow assigned to the ref
+      // before this cleanup ran (though with key changes, this should be less likely).
+      if (mapRef.current === mapInstanceToClean) {
+        console.log(`[MapEffect ${effectKey}] Cleanup: Nullifying mapRef.current.`);
         mapRef.current = null;
+      } else {
+         console.log(`[MapEffect ${effectKey}] Cleanup: mapRef.current (value: ${mapRef.current}) was already different or null than mapInstanceToClean (value: ${mapInstanceToClean}).`);
       }
     };
-  }, [mapInstanceKey]); // Depend on mapInstanceKey to trigger cleanup on HMR
+  }, [mapInstanceKey]); // This effect and its cleanup are tied to mapInstanceKey
+
 
   const position: LatLngExpression = selectedCoords
     ? [selectedCoords.lat, selectedCoords.lng]
@@ -98,19 +119,20 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   return (
     <div
-      key={mapInstanceKey} // This key on the parent div forces re-render of the whole div and its children on HMR
+      key={mapInstanceKey} 
       className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden"
       data-ai-hint="interactive map"
     >
       <MapContainer
-        // No explicit 'id' prop here, let react-leaflet manage its container's identity
-        key={mapInstanceKey} // Add key here as well to ensure MapContainer instance is replaced
+        key={mapInstanceKey} 
         center={position}
         zoom={zoom}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
-        whenCreated={(mapInstance) => { // Callback to get the map instance
+        whenCreated={(mapInstance) => {
           mapRef.current = mapInstance;
+          const container = mapInstance.getContainer();
+          console.log(`[MapEffect ${mapInstanceKey}] whenCreated - Map instance assigned to ref. Container _leaflet_id: ${container?._leaflet_id}`);
         }}
       >
         <TileLayer
@@ -121,11 +143,12 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
           <Circle
             center={[selectedCoords.lat, selectedCoords.lng]}
             radius={200}
-            pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} // Using direct hex color
+            pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }}
           />
         )}
-        <LocationMarkerComponent currentSelectedCoords={selectedCoords} onCoordsChange={onCoordsChange} />
+        <LocationMarker currentSelectedCoords={selectedCoords} onCoordsChange={onCoordsChange} />
       </MapContainer>
     </div>
   );
 }
+
