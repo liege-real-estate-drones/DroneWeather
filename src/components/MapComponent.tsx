@@ -29,32 +29,26 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-interface LocationMarkerInnerProps {
-  selectedCoords: Coordinates | null;
-  onCoordsChange: (coords: Coordinates) => void;
-}
+// interface LocationMarkerInnerProps {
+//   selectedCoords: Coordinates | null;
+//   onCoordsChange: (coords: Coordinates) => void;
+// }
 
-function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerProps) {
-  const map = useMapEvents({
-    click(e) {
-      onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-      // Rely on MapContainer's center prop to update the map view when parent state changes.
-    },
-  });
+// function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerProps) {
+//   const map = useMapEvents({
+//     click(e) {
+//       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
+//       // Rely on MapContainer's center prop to update the map view when parent state changes.
+//     },
+//   });
 
-  // The map's view (center/zoom) is controlled by MapContainer's props.
-  // This useEffect for flyTo is removed to avoid potential conflicts.
-  // useEffect(() => {
-  //   if (selectedCoords && map) {
-  //     map.flyTo([selectedCoords.lat, selectedCoords.lng], map.getZoom());
-  //   }
-  // }, [selectedCoords, map]);
+//   // The map's view (center/zoom) is controlled by MapContainer's props.
+//   // useEffect for flyTo was removed to avoid conflicts.
 
-
-  return selectedCoords === null ? null : (
-     <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
-  );
-}
+//   return selectedCoords === null ? null : (
+//      <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
+//   );
+// }
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
@@ -100,14 +94,19 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <LocationMarker selectedCoords={selectedCoords} onCoordsChange={onCoordsChange} />
-         {selectedCoords && (
+        {/* 
+          The LocationMarker and Circle components have been temporarily commented out 
+          for debugging the HMR "Map container is already initialized" error.
+          If HMR works without these, the issue lies within them or their interaction.
+        */}
+        {/* <LocationMarker selectedCoords={selectedCoords} onCoordsChange={onCoordsChange} /> */}
+         {/* {selectedCoords && (
           <Circle
             center={[selectedCoords.lat, selectedCoords.lng]}
             radius={100} // Example radius in meters
             pathOptions={{ color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.2 }}
           />
-        )}
+        )} */}
       </MapContainer>
     </div>
   );
