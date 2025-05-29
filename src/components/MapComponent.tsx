@@ -26,7 +26,7 @@ function MapCircleOverlay({
   fillOpacity,
 }: MapCircleOverlayProps) {
   const map = useMap();
-  const mapsLib = useMapsLibrary('maps');
+  const mapsLib = useMapsLibrary('maps'); // Correctly load 'maps' library
   const [circle, setCircle] = useState<google.maps.Circle | null>(null);
 
   useEffect(() => {
@@ -97,13 +97,13 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         zoom={zoom}
         style={{ width: '100%', height: '100%' }}
         gestureHandling={'greedy'}
-        disableDefaultUI={false}
-        mapTypeControl={false}
-        streetViewControl={false}
-        fullscreenControl={false}
-        clickableIcons={false}
-        mapId="droneWeatherMapStyle"
-        renderingType="RASTER" // Explicitly set renderingType
+        disableDefaultUI={false} // Enables default UI including zoom controls
+        mapTypeControl={true}    // Enable map type control (Satellite/Map)
+        streetViewControl={true} // Enable Street View Pegman
+        fullscreenControl={true} // Enable fullscreen button
+        clickableIcons={false}   // Keep this false to avoid POI popups
+        mapId="droneWeatherMapStyle" // Optional: for custom map styling
+        renderingType="RASTER"   // Explicitly set renderingType
         onClick={(e: MapMouseEvent) => {
           if (e.detail?.latLng) {
             onCoordsChange({ lat: e.detail.latLng.lat, lng: e.detail.latLng.lng });
@@ -119,10 +119,10 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
             <MapCircleOverlay
               center={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
               radius={200} // in meters
-              strokeColor={'var(--accent)'} 
+              strokeColor={'hsl(var(--accent))'} // Using HSL variable from CSS for accent
               strokeOpacity={0.8}
               strokeWeight={2}
-              fillColor={'var(--accent)'}   
+              fillColor={'hsl(var(--accent))'} // Using HSL variable from CSS for accent
               fillOpacity={0.35}
             />
           </>

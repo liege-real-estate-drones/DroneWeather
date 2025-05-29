@@ -1,12 +1,16 @@
+
 // src/app/api/weather/route.ts
 import { NextResponse } from 'next/server';
 import type { 
   UnifiedWeatherResponse, 
   UnifiedCurrentWeatherData, 
   UnifiedHourlyForecastItemData,
+  UnifiedDailyForecastItemData,
   OpenMeteoResponse,
-  OWMCurrentResponse, OWMForecastResponse
+  OWMCurrentResponse, OWMForecastResponse, OWMForecastListItem
 } from '@/types';
+import { format, parseISO, startOfDay, addHours, isSameDay } from 'date-fns';
+
 
 const OPENWEATHERMAP_API_KEY = process.env.OPENWEATHERMAP_API_KEY;
 
@@ -40,35 +44,40 @@ function wmoCodeToDescription(code: number | undefined): { summary: string; prec
     82: { summary: 'Violent rain showers', precipType: 'rain' },
     85: { summary: 'Slight snow showers', precipType: 'snow' },
     86: { summary: 'Heavy snow showers', precipType: 'snow' },
-    95: { summary: 'Thunderstorm', precipType: 'rain' }, // Assuming rain for thunderstorm
+    95: { summary: 'Thunderstorm', precipType: 'rain' }, 
     96: { summary: 'Thunderstorm with slight hail', precipType: 'rain' },
     99: { summary: 'Thunderstorm with heavy hail', precipType: 'rain' },
   };
   return { ...(descriptions[code] || { summary: `Unknown WMO code ${code}`, precipType: 'other' }), weather_icon_code: code };
 }
 
-function owmToUnifiedPrecip(weather: OWMCurrentResponse | OWMForecastListItem): { total: number | null; type: string; } {
+function owmToUnifiedPrecip(weatherItem: OWMCurrentResponse | OWMForecastListItem): { total: number | null; type: string; } {
   let totalPrecip = 0;
   let precipType = 'none';
 
-  if (weather.rain) {
-    totalPrecip = weather.rain['1h'] || weather.rain['3h'] || 0;
+  // OWM provides rain/snow usually as "1h" for current and "3h" for forecast
+  const rainData = (weatherItem as OWMForecastListItem).rain || (weatherItem as OWMCurrentResponse).rain;
+  const snowData = (weatherItem as OWMForecastListItem).snow || (weatherItem as OWMCurrentResponse).snow;
+
+  if (rainData) {
+    // For forecast, rain is often '3h', for current '1h'
+    totalPrecip = rainData['3h'] ?? rainData['1h'] ?? 0;
     precipType = 'rain';
   }
-  if (weather.snow) {
-    totalPrecip = (weather.snow['1h'] || weather.snow['3h'] || 0); // Assuming snow overrides rain if both present
+  if (snowData) {
+     // For forecast, snow is often '3h', for current '1h'
+    totalPrecip = (snowData['3h'] ?? snowData['1h'] ?? 0);
     precipType = 'snow';
   }
   
-  // OWM weather array can give more specific types
-  if (weather.weather && weather.weather.length > 0) {
-    const mainWeather = weather.weather[0].main.toLowerCase();
-    if (mainWeather.includes('rain') || mainWeather.includes('drizzle')) precipType = 'rain';
-    else if (mainWeather.includes('snow')) precipType = 'snow';
-    else if (mainWeather.includes('thunderstorm')) precipType = 'rain'; // Or 'other'
-    // other conditions like 'clear', 'clouds', 'fog', 'mist' map to 'none' or 'other'
+  if (weatherItem.weather && weatherItem.weather.length > 0) {
+    const mainWeather = weatherItem.weather[0].main.toLowerCase();
+    if (precipType === 'none') { // Only update if precipType hasn't been set by rain/snow objects
+        if (mainWeather.includes('rain') || mainWeather.includes('drizzle')) precipType = 'rain';
+        else if (mainWeather.includes('snow')) precipType = 'snow';
+        else if (mainWeather.includes('thunderstorm')) precipType = 'rain';
+    }
   }
-
   return { total: totalPrecip > 0 ? totalPrecip : null, type: precipType };
 }
 
@@ -85,11 +94,11 @@ async function fetchOpenMeteoData(lat: string, lon: string): Promise<UnifiedWeat
     longitude: lon,
     current: 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,dew_point_2m,cloud_base_height',
     hourly: 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,cloud_cover,visibility,wind_speed_10m,wind_direction_10m,wind_gusts_10m,dew_point_2m,cloud_base_height',
-    daily: 'weather_code,sunrise,sunset',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max',
     timezone: 'auto',
-    forecast_days: '1', // For hourly, get 24 hours. Open-Meteo gives up to 16 days for free on hourly. We only need 1 day of hourly.
+    forecast_days: '8', 
   });
-  const url = `https://api.open-meteo.com/v1/metno?${params.toString()}`; // Using MET Norway model via Open-Meteo
+  const url = `https://api.open-meteo.com/v1/metno?${params.toString()}`;
 
   try {
     const response = await fetch(url);
@@ -118,19 +127,18 @@ async function fetchOpenMeteoData(lat: string, lon: string): Promise<UnifiedWeat
           type: wmoInfo.precipType,
         },
         cloud_cover: { total: data.current.cloud_cover ?? null },
-        visibility: { total: data.current.visibility ?? null }, // in meters
+        visibility: { total: data.current.visibility ?? null },
         dew_point: data.current.dew_point_2m ?? null,
         pressure: { msl: data.current.pressure_msl ?? null },
         humidity: data.current.relative_humidity_2m ?? null,
-        sunrise: data.daily?.sunrise?.[0] ?? null,
+        sunrise: data.daily?.sunrise?.[0] ?? null, // Sunrise/sunset from daily for current day
         sunset: data.daily?.sunset?.[0] ?? null,
         cloud_base_height: data.current.cloud_base_height ?? null,
       };
     }
 
     let hourlyDataItems: UnifiedHourlyForecastItemData[] = [];
-    if (data.hourly && data.hourly_units && data.hourly.time) {
-       // Take first 24 entries if more are returned
+    if (data.hourly?.time) {
       const numEntries = Math.min(data.hourly.time.length, 24);
       for (let i = 0; i < numEntries; i++) {
         const wmoInfo = wmoCodeToDescription(data.hourly.weather_code?.[i]);
@@ -152,12 +160,32 @@ async function fetchOpenMeteoData(lat: string, lon: string): Promise<UnifiedWeat
           },
           precipitation_probability: data.hourly.precipitation_probability?.[i] ?? null,
           cloud_cover: { total: data.hourly.cloud_cover?.[i] ?? null },
-          visibility: { total: data.hourly.visibility?.[i] ?? null }, // in meters
+          visibility: { total: data.hourly.visibility?.[i] ?? null },
           dew_point: data.hourly.dew_point_2m?.[i] ?? null,
           humidity: data.hourly.relative_humidity_2m?.[i] ?? null,
           cloud_base_height: data.hourly.cloud_base_height?.[i] ?? null,
         });
       }
+    }
+
+    let dailyDataItems: UnifiedDailyForecastItemData[] = [];
+    if (data.daily?.time) {
+        for (let i = 0; i < data.daily.time.length; i++) {
+            const wmoInfo = wmoCodeToDescription(data.daily.weather_code?.[i]);
+            dailyDataItems.push({
+                date: data.daily.time[i], // This is YYYY-MM-DD
+                summary: wmoInfo.summary,
+                weather_icon_code: wmoInfo.weather_icon_code,
+                temp_min: data.daily.temperature_2m_min?.[i] ?? null,
+                temp_max: data.daily.temperature_2m_max?.[i] ?? null,
+                wind_speed_max: data.daily.wind_speed_10m_max?.[i] ?? null,
+                wind_gust_max: data.daily.wind_gusts_10m_max?.[i] ?? null,
+                precipitation_sum: data.daily.precipitation_sum?.[i] ?? null,
+                precipitation_probability_max: data.daily.precipitation_probability_max?.[i] ?? null,
+                sunrise: data.daily.sunrise?.[i] ?? null,
+                sunset: data.daily.sunset?.[i] ?? null,
+            });
+        }
     }
     
     return {
@@ -165,9 +193,10 @@ async function fetchOpenMeteoData(lat: string, lon: string): Promise<UnifiedWeat
       lon,
       elevation: data.elevation ?? null,
       timezone: data.timezone ?? null,
-      units: 'metric', // Open-Meteo defaults to metric
+      units: 'metric',
       current: currentData,
       hourly: hourlyDataItems.length > 0 ? { data: hourlyDataItems } : null,
+      daily: dailyDataItems.length > 0 ? { data: dailyDataItems } : null,
     };
 
   } catch (error) {
@@ -183,7 +212,6 @@ async function fetchOpenWeatherData(lat: string, lon: string): Promise<UnifiedWe
     return null;
   }
   try {
-    // Fetch current weather
     const currentUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OPENWEATHERMAP_API_KEY}&units=metric&lang=en`;
     const currentResponse = await fetch(currentUrl);
     if (!currentResponse.ok) {
@@ -193,7 +221,7 @@ async function fetchOpenWeatherData(lat: string, lon: string): Promise<UnifiedWe
     const currentOWMData = await currentResponse.json() as OWMCurrentResponse;
 
     let currentData: UnifiedCurrentWeatherData | null = null;
-    if (currentOWMData && currentOWMData.weather && currentOWMData.weather.length > 0) {
+    if (currentOWMData?.weather?.length > 0) {
       const precipInfo = owmToUnifiedPrecip(currentOWMData);
       currentData = {
         summary: currentOWMData.weather[0].description,
@@ -206,60 +234,51 @@ async function fetchOpenWeatherData(lat: string, lon: string): Promise<UnifiedWe
           angle: currentOWMData.wind?.deg ?? null,
           dir: degreesToCardinal(currentOWMData.wind?.deg),
         },
-        precipitation: {
-          total: precipInfo.total,
-          type: precipInfo.type,
-        },
+        precipitation: { total: precipInfo.total, type: precipInfo.type },
         cloud_cover: { total: currentOWMData.clouds?.all ?? null },
-        visibility: { total: currentOWMData.visibility ?? null }, // in meters
-        dew_point: null, // OWM doesn't directly provide dew point in free current weather. Calculation needed.
-        pressure: { msl: currentOWMData.main?.pressure ?? null }, // OWM provides surface pressure, not always MSL.
+        visibility: { total: currentOWMData.visibility ?? null },
+        dew_point: null, 
+        pressure: { msl: currentOWMData.main?.pressure ?? null },
         humidity: currentOWMData.main?.humidity ?? null,
         sunrise: currentOWMData.sys?.sunrise ? new Date(currentOWMData.sys.sunrise * 1000).toISOString() : null,
         sunset: currentOWMData.sys?.sunset ? new Date(currentOWMData.sys.sunset * 1000).toISOString() : null,
-        cloud_base_height: null, // Not typically available in OWM free current
+        cloud_base_height: null,
       };
     }
     
-    // Fetch hourly forecast (5 day / 3 hour forecast)
-    const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHERMAP_API_KEY}&units=metric&lang=en`;
+    const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHERMAP_API_KEY}&units=metric&lang=en&cnt=40`; // cnt=40 for 5 days (40 * 3h = 120h = 5 days)
     const forecastResponse = await fetch(forecastUrl);
      if (!forecastResponse.ok) {
       console.error(`OWM Forecast API error: ${forecastResponse.status}`, await forecastResponse.text());
-      // Return current data if forecast fails but current succeeded
       return {
         lat, lon, elevation: null, timezone: currentOWMData.timezone ? (currentOWMData.timezone / 3600).toString() + ' UTC' : null, units: 'metric',
-        current: currentData, hourly: null,
+        current: currentData, hourly: null, daily: null,
       };
     }
     const forecastOWMData = await forecastResponse.json() as OWMForecastResponse;
     
     let hourlyDataItems: UnifiedHourlyForecastItemData[] = [];
-    if (forecastOWMData && forecastOWMData.list) {
-      // OWM provides 3-hourly data. We need up to 24 hours, so 8 entries.
-      const entriesToTake = Math.min(forecastOWMData.list.length, 8); 
+    if (forecastOWMData?.list) {
+      const entriesToTake = Math.min(forecastOWMData.list.length, 8); // Max 24 hours (8 * 3h)
       for (let i = 0; i < entriesToTake; i++) {
         const item = forecastOWMData.list[i];
         const precipInfo = owmToUnifiedPrecip(item);
         hourlyDataItems.push({
-          date: item.dt_txt.replace(' ', 'T') + 'Z', // Approximate to ISO, OWM dt_txt is UTC
+          date: item.dt_txt.replace(' ', 'T') + 'Z',
           summary: item.weather[0].description,
           weather_icon_code: item.weather[0].icon,
           temp: item.main?.temp ?? null,
           feels_like: item.main?.feels_like ?? null,
           wind: {
             speed: item.wind?.speed ?? null,
-            gust: item.wind?.gust ?? null, // Might not always be there
+            gust: item.wind?.gust ?? null,
             angle: item.wind?.deg ?? null,
             dir: degreesToCardinal(item.wind?.deg),
           },
-          precipitation: {
-            total: precipInfo.total,
-            type: precipInfo.type,
-          },
-          precipitation_probability: item.pop ? item.pop * 100 : null, // OWM pop is 0-1
+          precipitation: { total: precipInfo.total, type: precipInfo.type },
+          precipitation_probability: item.pop ? item.pop * 100 : null,
           cloud_cover: { total: item.clouds?.all ?? null },
-          visibility: { total: item.visibility ?? null }, // in meters
+          visibility: { total: item.visibility ?? null },
           dew_point: null,
           humidity: item.main?.humidity ?? null,
           cloud_base_height: null,
@@ -267,14 +286,77 @@ async function fetchOpenWeatherData(lat: string, lon: string): Promise<UnifiedWe
       }
     }
 
+    let dailyDataItems: UnifiedDailyForecastItemData[] = [];
+    if (forecastOWMData?.list) {
+        const dailyAggregates: { [date: string]: { temps: number[], speeds: number[], gusts: (number | null)[], precips: number[], pops: number[], weatherItems: OWMWeather[] } } = {};
+
+        forecastOWMData.list.forEach(item => {
+            const dateStr = item.dt_txt.substring(0, 10); // YYYY-MM-DD
+            if (!dailyAggregates[dateStr]) {
+                dailyAggregates[dateStr] = { temps: [], speeds: [], gusts: [], precips: [], pops: [], weatherItems: [] };
+            }
+            if (item.main?.temp) dailyAggregates[dateStr].temps.push(item.main.temp);
+            if (item.wind?.speed) dailyAggregates[dateStr].speeds.push(item.wind.speed);
+            dailyAggregates[dateStr].gusts.push(item.wind?.gust ?? null); // Store null if gust is undefined
+            
+            const precipInfo = owmToUnifiedPrecip(item);
+            if (precipInfo.total !== null) dailyAggregates[dateStr].precips.push(precipInfo.total);
+            
+            if (item.pop) dailyAggregates[dateStr].pops.push(item.pop * 100);
+            if (item.weather && item.weather.length > 0) dailyAggregates[dateStr].weatherItems.push(item.weather[0]);
+        });
+
+        const today = format(new Date(), 'yyyy-MM-dd');
+
+        for (const date in dailyAggregates) {
+            // Skip if the date is in the past relative to "today" from OWM's perspective
+            // OWM dt_txt is UTC. We compare date strings.
+            if (date < today && forecastOWMData.list.length > 8) { // Only skip if we have enough future data
+                 const firstForecastDate = forecastOWMData.list[0].dt_txt.substring(0,10);
+                 if (date < firstForecastDate) continue;
+            }
+
+
+            const agg = dailyAggregates[date];
+            const validGusts = agg.gusts.filter(g => typeof g === 'number') as number[];
+            
+            // Select weather icon/summary from midday or most frequent
+            let representativeWeather = agg.weatherItems.find(w => {
+                const itemDate = parseISO(date + 'T12:00:00Z'); // Assume midday for representative weather
+                const forecastItem = forecastOWMData.list.find(f => isSameDay(parseISO(f.dt_txt.replace(' ', 'T')+'Z'), itemDate));
+                return forecastItem?.weather[0].id === w.id;
+            }) || agg.weatherItems[Math.floor(agg.weatherItems.length / 2)] || {icon: '01d', description: 'N/A'};
+
+
+            dailyDataItems.push({
+                date: date,
+                summary: representativeWeather.description,
+                weather_icon_code: representativeWeather.icon,
+                temp_min: agg.temps.length > 0 ? Math.min(...agg.temps) : null,
+                temp_max: agg.temps.length > 0 ? Math.max(...agg.temps) : null,
+                wind_speed_max: agg.speeds.length > 0 ? Math.max(...agg.speeds) : null,
+                wind_gust_max: validGusts.length > 0 ? Math.max(...validGusts) : (agg.speeds.length > 0 ? Math.max(...agg.speeds) : null),
+                precipitation_sum: agg.precips.length > 0 ? agg.precips.reduce((a, b) => a + b, 0) : null,
+                precipitation_probability_max: agg.pops.length > 0 ? Math.max(...agg.pops) : null,
+                sunrise: null, // Not available per day in this OWM endpoint
+                sunset: null,
+            });
+        }
+         // Ensure we don't have more than 8 days if OWM returns more due to cnt=40 over 5 days
+        if (dailyDataItems.length > 8) {
+            dailyDataItems = dailyDataItems.slice(0, 8);
+        }
+    }
+
     return {
       lat,
       lon,
-      elevation: null, // OWM doesn't provide elevation directly in these calls
-      timezone: currentOWMData.timezone ? (currentOWMData.timezone / 3600).toString() + ' UTC' : null, // OWM timezone is offset in seconds
+      elevation: null, 
+      timezone: currentOWMData.timezone ? (currentOWMData.timezone / 3600).toString() + ' UTC' : null,
       units: 'metric',
       current: currentData,
       hourly: hourlyDataItems.length > 0 ? { data: hourlyDataItems } : null,
+      daily: dailyDataItems.length > 0 ? { data: dailyDataItems } : null,
     };
 
   } catch (error) {
@@ -293,7 +375,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Les coordonnées de latitude et longitude sont requises.' }, { status: 400 });
   }
   
-  // Validate coordinates
   const numLat = parseFloat(lat);
   const numLon = parseFloat(lon);
   if (isNaN(numLat) || isNaN(numLon) || numLat < -90 || numLat > 90 || numLon < -180 || numLon > 180) {
@@ -302,12 +383,10 @@ export async function GET(request: Request) {
 
   let weatherData: UnifiedWeatherResponse | null = null;
 
-  // Try Open-Meteo first
   console.log("Attempting to fetch from Open-Meteo...");
   weatherData = await fetchOpenMeteoData(lat, lon);
 
-  // If Open-Meteo fails, try OpenWeatherMap
-  if (!weatherData || !weatherData.current || !weatherData.hourly) {
+  if (!weatherData || !weatherData.current || !weatherData.hourly || !weatherData.daily ) {
     console.warn("Open-Meteo fetch failed or returned incomplete data, trying OpenWeatherMap...");
     if (!OPENWEATHERMAP_API_KEY) {
         console.error('OpenWeatherMap API key is not configured. Cannot use as fallback.');
@@ -320,9 +399,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Échec de la récupération des données météo depuis toutes les sources.' }, { status: 500 });
   }
   
-  if (!weatherData.current && !weatherData.hourly) {
+  if (!weatherData.current && !weatherData.hourly && !weatherData.daily) {
      return NextResponse.json({ error: 'Aucune donnée météo actuelle ou prévisionnelle disponible pour ce lieu.' }, { status: 404 });
   }
 
   return NextResponse.json(weatherData);
 }
+
