@@ -4,7 +4,7 @@
 import { Map, AdvancedMarker, MapMouseEvent, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
-import { useMemo, useEffect, useState } from 'react'; // Added useEffect, useState
+import { useMemo, useEffect, useState } from 'react'; 
 
 interface MapCircleOverlayProps {
   center: google.maps.LatLngLiteral;
@@ -44,7 +44,7 @@ function MapCircleOverlay({
         strokeWeight,
         fillColor,
         fillOpacity,
-        clickable: false, // Usually circles are not clickable unless specified
+        clickable: false, 
       });
       setCircle(newCircle);
     } else {
@@ -103,6 +103,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         fullscreenControl={false}
         clickableIcons={false}
         mapId="droneWeatherMapStyle"
+        renderingType="RASTER" // Explicitly set renderingType
         onClick={(e: MapMouseEvent) => {
           if (e.detail?.latLng) {
             onCoordsChange({ lat: e.detail.latLng.lat, lng: e.detail.latLng.lng });
@@ -118,10 +119,10 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
             <MapCircleOverlay
               center={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
               radius={200} // in meters
-              strokeColor={'#FFB866'} // Accent color
+              strokeColor={'var(--accent)'} 
               strokeOpacity={0.8}
               strokeWeight={2}
-              fillColor={'#FFB866'}   // Accent color
+              fillColor={'var(--accent)'}   
               fillOpacity={0.35}
             />
           </>
