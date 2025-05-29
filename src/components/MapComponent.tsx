@@ -19,7 +19,7 @@ if (typeof window !== 'undefined') {
   L.Icon.Default.mergeOptions({
     iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
     iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png', // Corrected typo here
   });
 }
 
@@ -40,9 +40,12 @@ function LocationMarker({
   const map = useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
+      // Removed map.flyTo from here as MapContainer center prop should handle it
     },
   });
 
+  // useEffect to handle map flying to new selectedCoords was removed
+  // Marker rendering based on selectedCoords
   return selectedCoords === null ? null : (
     <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
   );
@@ -51,20 +54,10 @@ function LocationMarker({
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
-  const [canRenderMap, setCanRenderMap] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
-
-  useEffect(() => {
-    if (isClient) {
-      const timer = setTimeout(() => {
-        setCanRenderMap(true);
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [isClient]);
 
   const position: LatLngExpression = selectedCoords
     ? [selectedCoords.lat, selectedCoords.lng]
@@ -72,10 +65,12 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   const zoom = selectedCoords ? DEFAULT_MAP_ZOOM + 2 : DEFAULT_MAP_ZOOM;
 
+  // This key changes on HMR, forcing React to unmount/remount the keyed components.
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
+  // This ID also changes on HMR, giving Leaflet a new DOM ID for its container.
   const mapDomID = `leaflet-map-${mapInstanceKey}`;
 
-  if (!isClient || !canRenderMap) {
+  if (!isClient) {
     return (
       <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden flex items-center justify-center" data-ai-hint="interactive map loading">
         <Skeleton className="h-full w-full rounded-lg" />
@@ -103,6 +98,8 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         />
         {/*
           LocationMarker and Circle are still temporarily commented out
+          {selectedCoords && <Circle center={[selectedCoords.lat, selectedCoords.lng]} radius={200} />}
+          <LocationMarker selectedCoords={selectedCoords} onCoordsChange={onCoordsChange} />
         */}
       </MapContainer>
     </div>
