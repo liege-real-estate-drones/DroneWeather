@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 // Fix for default icon path issue with Webpack, made idempotent for HMR
 if (typeof window !== 'undefined') {
   const proto = L.Icon.Default.prototype as any;
+  // Only delete if it exists, to avoid errors on subsequent HMR runs if already deleted
   if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) {
     delete proto._getIconUrl;
   }
@@ -38,7 +39,6 @@ function LocationMarkerComponent({
   useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-      // No flyTo here, MapContainer center prop handles view changes based on selectedCoords
     },
   });
 
@@ -50,24 +50,33 @@ function LocationMarkerComponent({
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
-  const mapRef = useRef<LeafletMapType | null>(null); // To store the Leaflet map instance
+  const mapRef = useRef<LeafletMapType | null>(null); 
 
   // This key changes on HMR, forcing React to unmount/remount the keyed components.
+  // It also ensures a new map DOM ID is generated.
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
-  // This ID also changes on HMR, giving Leaflet a new DOM ID for its container.
-  const mapDomID = `leaflet-map-${mapInstanceKey}`;
-
+  
   useEffect(() => {
     setIsClient(true);
   }, []);
 
   // Effect to manually remove the map instance on unmount or when mapInstanceKey changes (HMR)
   useEffect(() => {
+    const currentMapInstance = mapRef.current;
     // The cleanup function is called when the component unmounts
     // or BEFORE this effect re-runs if mapInstanceKey changes.
     return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
+      if (currentMapInstance) {
+        try {
+          // console.log('Attempting to remove map instance for key:', mapInstanceKey, currentMapInstance);
+          currentMapInstance.remove(); // Call Leaflet's cleanup
+        } catch (e) {
+          console.error('Error removing map instance:', e);
+        }
+      }
+      // If the ref still points to the instance we captured, nullify it.
+      // This might be redundant if the component instance is fully replaced by key change.
+      if (mapRef.current === currentMapInstance) {
         mapRef.current = null;
       }
     };
@@ -94,7 +103,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
       data-ai-hint="interactive map"
     >
       <MapContainer
-        id={mapDomID} // Assign the dynamic ID to the map container
+        // No explicit 'id' prop here, let react-leaflet manage its container's identity
         key={mapInstanceKey} // Add key here as well to ensure MapContainer instance is replaced
         center={position}
         zoom={zoom}
@@ -112,8 +121,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
           <Circle
             center={[selectedCoords.lat, selectedCoords.lng]}
             radius={200}
-            // Accent color from theme: #FFB866 (Yellow-Orange)
-            pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }}
+            pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} // Using direct hex color
           />
         )}
         <LocationMarkerComponent currentSelectedCoords={selectedCoords} onCoordsChange={onCoordsChange} />
