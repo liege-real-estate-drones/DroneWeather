@@ -74,27 +74,30 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     if (weatherData?.current && activeDroneProfile) {
       const performAssessment = async () => {
         setIsAssessingSafety(true);
-        setSafetyAssessment(null);
+        setSafetyAssessment(null); // Reset assessment at the beginning
 
         const currentData = weatherData.current;
         const tempIsValid = typeof currentData.temp === 'number';
-        const windIsValid = currentData.wind && typeof currentData.wind.speed === 'number' && typeof currentData.wind.gust === 'number';
+        const windSpeedIsValid = currentData.wind && typeof currentData.wind.speed === 'number';
+        const windGustIsValid = currentData.wind && typeof currentData.wind.gust === 'number';
 
-        if (!tempIsValid || !windIsValid) {
-          console.error("Weather data for assessment is incomplete:", {
-            temp: currentData.temp,
-            windSpeed: currentData.wind?.speed,
-            windGust: currentData.wind?.gust,
-          });
+        if (!tempIsValid || !windSpeedIsValid || !windGustIsValid) {
+          console.warn(
+            `AI Safety Assessment: Weather data from API is incomplete or invalid for assessment. Required numeric fields: ` +
+            `Temperature (received: ${currentData.temp}), ` +
+            `Wind Speed (received: ${currentData.wind?.speed}), ` +
+            `Wind Gust (received: ${currentData.wind?.gust}). ` +
+            `Assessment will default to unsafe.`
+          );
           toast({
             title: "Évaluation de sécurité impossible",
-            description: "Données météo essentielles (température, vitesse/rafales de vent) manquantes pour l'évaluation.",
+            description: "Données météo essentielles (température, vitesse/rafales de vent) manquantes ou invalides pour l'évaluation.",
             variant: "destructive",
           });
           setSafetyAssessment({
             safeToFly: false,
             indicatorColor: 'RED',
-            message: 'Données météo incomplètes. Impossible d\'évaluer la sécurité du vol.'
+            message: 'Données météo incomplètes ou invalides. Impossible d\'évaluer la sécurité du vol.'
           });
           setIsAssessingSafety(false);
           return; 
@@ -102,10 +105,10 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
 
         try {
           const assessmentInput = {
-            temperature: currentData.temp,
-            windSpeed: currentData.wind.speed,
-            windGust: currentData.wind.gust,
-            precipitationType: currentData.precipitation.type,
+            temperature: currentData.temp, // Known to be a number here
+            windSpeed: currentData.wind.speed, // Known to be a number here
+            windGust: currentData.wind.gust, // Known to be a number here
+            precipitationType: currentData.precipitation?.type || "none", // Default to "none" if undefined
             maxWindSpeed: activeDroneProfile.maxWindSpeed,
             minTemperature: activeDroneProfile.minTemp,
             maxTemperature: activeDroneProfile.maxTemp,
@@ -130,6 +133,8 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
       };
       performAssessment();
     } else {
+      // Reset assessment if there's no current weather data or no active drone profile
+      // This handles cases where coords are deselected or weatherData becomes null
       setSafetyAssessment(null);
     }
   }, [weatherData, activeDroneProfile, toast]);
@@ -144,47 +149,60 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     );
   }
   
+  // More specific loading state: show skeleton if query is loading/fetching,
+  // OR if we have current data but are still waiting for AI assessment.
   const showLoadingSkeleton = isLoading || isFetching || (weatherData?.current && isAssessingSafety && !safetyAssessment);
+
 
   if (showLoadingSkeleton) {
     return (
-      <div className="space-y-6 mt-6">
-        <Skeleton className="h-24 w-full rounded-lg" />
-        <Skeleton className="h-64 w-full rounded-lg" />
-        <Skeleton className="h-48 w-full rounded-lg" />
+      <div className="space-y-6 mt-6 md:mt-0">
+        <Skeleton className="h-24 w-full rounded-lg" /> {/* SafetyIndicator placeholder */}
+        <Skeleton className="h-64 w-full rounded-lg" /> {/* CurrentWeather placeholder */}
+        <Skeleton className="h-48 w-full rounded-lg" /> {/* HourlyForecast placeholder */}
       </div>
     );
   }
 
   if (isError && error) { 
+    // This specific error message is already handled by a toast.
+    // We can show a more generic error message here in the component body.
     return (
       <Alert variant="destructive" className="mt-6 shadow-md">
         <AlertTriangle className="h-5 w-5" />
-        <AlertTitle>Erreur lors de la récupération de la météo</AlertTitle>
-        <AlertDescription>{error.message}</AlertDescription>
+        <AlertTitle>Erreur de données météo</AlertTitle>
+        <AlertDescription>
+          Impossible de charger les informations météo pour le lieu sélectionné.
+          Veuillez vérifier votre connexion ou réessayer plus tard. Message: {error.message}
+        </AlertDescription>
       </Alert>
     );
   }
 
   if (!weatherData || !weatherData.current) {
+    // This case might occur if the API call succeeds but returns no 'current' data,
+    // or if coords become valid but data fetching hasn't completed yet (though isLoading/isFetching should cover that)
     return (
       <Alert variant="default" className="mt-6 shadow-md">
         <CloudOff className="h-5 w-5" />
-        <AlertTitle>Aucune donnée météo</AlertTitle>
-        <AlertDescription>Impossible de récupérer les données météo pour le lieu sélectionné. Veuillez réessayer ou sélectionner un autre lieu.</AlertDescription>
+        <AlertTitle>Aucune donnée météo actuelle</AlertTitle>
+        <AlertDescription>
+          Aucune donnée météo actuelle n'a été trouvée pour le lieu sélectionné. 
+          Cela peut arriver si l'API ne fournit pas de données pour ce point précis.
+        </AlertDescription>
       </Alert>
     );
   }
   
   return (
     <div className="space-y-6 mt-6 md:mt-0">
-      {isAssessingSafety && !safetyAssessment ? (
+      {isAssessingSafety && !safetyAssessment ? ( // Show skeleton for safety indicator only when assessing
         <Skeleton className="h-24 w-full rounded-lg" />
       ) : (
         <SafetyIndicator assessment={safetyAssessment} />
       )}
       {weatherData.current && <CurrentWeather data={weatherData.current} />}
-      {weatherData.hourly?.data && <HourlyForecastList data={weatherData.hourly.data} />}
+      {weatherData.hourly?.data && weatherData.hourly.data.length > 0 && <HourlyForecastList data={weatherData.hourly.data} />}
     </div>
   );
 }
