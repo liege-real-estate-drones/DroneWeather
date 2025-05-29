@@ -3,16 +3,17 @@
 
 import { MapContainer, TileLayer } from 'react-leaflet';
 import type { LatLngExpression } from 'leaflet';
-import L from 'leaflet'; 
+import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
 import { useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
+// import { Circle, Marker, useMapEvents } from 'react-leaflet'; // Temporarily commented out
 
 // Fix for default icon path issue with Webpack, made idempotent for HMR
 if (typeof window !== 'undefined') {
   const proto = L.Icon.Default.prototype as any;
-  if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) { // Check if property exists before deleting
+  if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) {
     delete proto._getIconUrl;
   }
   L.Icon.Default.mergeOptions({
@@ -27,9 +28,30 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
+// Temporarily commented out LocationMarker
+/*
+function LocationMarker({
+  selectedCoords,
+  onCoordsChange,
+}: {
+  selectedCoords: Coordinates | null;
+  onCoordsChange: (coords: Coordinates) => void;
+}) {
+  const map = useMapEvents({
+    click(e) {
+      onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+  });
+
+  return selectedCoords === null ? null : (
+    <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
+  );
+}
+*/
+
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
-  const [canRenderMap, setCanRenderMap] = useState(false); // New state for delayed rendering
+  const [canRenderMap, setCanRenderMap] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -37,10 +59,9 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   useEffect(() => {
     if (isClient) {
-      // Defer map rendering to the next event loop tick
       const timer = setTimeout(() => {
         setCanRenderMap(true);
-      }, 0); 
+      }, 0);
       return () => clearTimeout(timer);
     }
   }, [isClient]);
@@ -52,9 +73,9 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   const zoom = selectedCoords ? DEFAULT_MAP_ZOOM + 2 : DEFAULT_MAP_ZOOM;
 
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
-  const mapDomID = `leaflet-map-${mapInstanceKey}`; 
+  const mapDomID = `leaflet-map-${mapInstanceKey}`;
 
-  if (!isClient || !canRenderMap) { // Check canRenderMap before rendering
+  if (!isClient || !canRenderMap) {
     return (
       <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden flex items-center justify-center" data-ai-hint="interactive map loading">
         <Skeleton className="h-full w-full rounded-lg" />
@@ -70,7 +91,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
     >
       <MapContainer
         id={mapDomID} // Assign the dynamic ID to the map container
-        // key prop removed from here; parent div's key manages the instance lifecycle
+        key={mapInstanceKey} // Add key here as well to ensure MapContainer instance is replaced
         center={position}
         zoom={zoom}
         scrollWheelZoom={true}
@@ -80,19 +101,9 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {/* 
-          The LocationMarker and Circle components are still temporarily commented out 
-          for diagnosing the HMR "Map container is already initialized" error.
-          If HMR works without these, the issue lies within them or their interaction.
+        {/*
+          LocationMarker and Circle are still temporarily commented out
         */}
-         {/* <LocationMarker selectedCoords={selectedCoords} onCoordsChange={onCoordsChange} /> */}
-         {/* {selectedCoords && (
-          <Circle
-            center={[selectedCoords.lat, selectedCoords.lng]}
-            radius={100} // Example radius in meters
-            pathOptions={{ color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.2 }}
-          />
-        )} */}
       </MapContainer>
     </div>
   );
