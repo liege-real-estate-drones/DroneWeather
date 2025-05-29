@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -20,16 +21,12 @@ interface WeatherInfoComponentProps {
 async function fetchWeather(coords: Coordinates): Promise<MeteosourceResponse> {
   const { lat, lng } = coords;
   const response = await fetch(
-    // Utilisation d'une URL relative pour appeler votre propre route API
     `/api/weather?lat=${lat}&lon=${lng}`
   );
   if (!response.ok) {
-    // Tenter de lire le corps de l'erreur comme JSON
-    const errorData = await response.json().catch(() => ({ 
-      // Fallback si le corps n'est pas JSON ou si l'analyse échoue
-      error: `Erreur API (${response.status}). Impossible d'analyser les détails de l'erreur.` 
+    const errorData = await response.json().catch(() => ({
+      error: `Erreur API (${response.status}). Impossible d'analyser les détails de l'erreur.`
     }));
-    // Utiliser le message d'erreur du backend s'il existe, sinon un message générique
     throw new Error(errorData.error || `Erreur API (${response.status}) lors de la récupération des données météo depuis votre route API.`);
   }
   return response.json();
@@ -52,24 +49,22 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     staleTime: 1000 * 60 * 15, // 15 minutes
     gcTime: 1000 * 60 * 30, // 30 minutes
     retry: (failureCount, errorInstance) => {
-      // Ne pas réessayer pour les erreurs de configuration serveur ou les erreurs de validation des paramètres (souvent 422)
       if (errorInstance.message.includes('service météo n\'est pas configuré') ||
-          errorInstance.message.includes('Erreur Meteosource :') || // Indique une erreur relayée par notre backend
+          errorInstance.message.includes('Erreur Meteosource :') || 
           errorInstance.message.includes('Coordonnées invalides') ||
-          errorInstance.message.includes('paramètre invalide')) { // Message générique pour erreurs de validation
+          errorInstance.message.includes('paramètre invalide')) {
         return false;
       }
-      // Limiter les nouvelles tentatives pour d'autres types d'erreurs
       return failureCount < 2;
     },
     refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
-    if (isError && error) { // S'assurer que error n'est pas null quand isError est true
+    if (isError && error) { 
       toast({
         title: "Erreur de récupération météo",
-        description: error.message, // Ce message devrait maintenant être plus détaillé grâce à la route API
+        description: error.message, 
         variant: "destructive",
       });
     }
@@ -79,13 +74,38 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     if (weatherData?.current && activeDroneProfile) {
       const performAssessment = async () => {
         setIsAssessingSafety(true);
-        setSafetyAssessment(null); 
+        setSafetyAssessment(null);
+
+        const currentData = weatherData.current;
+        const tempIsValid = typeof currentData.temp === 'number';
+        const windIsValid = currentData.wind && typeof currentData.wind.speed === 'number' && typeof currentData.wind.gust === 'number';
+
+        if (!tempIsValid || !windIsValid) {
+          console.error("Weather data for assessment is incomplete:", {
+            temp: currentData.temp,
+            windSpeed: currentData.wind?.speed,
+            windGust: currentData.wind?.gust,
+          });
+          toast({
+            title: "Évaluation de sécurité impossible",
+            description: "Données météo essentielles (température, vitesse/rafales de vent) manquantes pour l'évaluation.",
+            variant: "destructive",
+          });
+          setSafetyAssessment({
+            safeToFly: false,
+            indicatorColor: 'RED',
+            message: 'Données météo incomplètes. Impossible d\'évaluer la sécurité du vol.'
+          });
+          setIsAssessingSafety(false);
+          return; 
+        }
+
         try {
           const assessmentInput = {
-            temperature: weatherData.current!.temp,
-            windSpeed: weatherData.current!.wind.speed,
-            windGust: weatherData.current!.wind.gust,
-            precipitationType: weatherData.current!.precipitation.type,
+            temperature: currentData.temp,
+            windSpeed: currentData.wind.speed,
+            windGust: currentData.wind.gust,
+            precipitationType: currentData.precipitation.type,
             maxWindSpeed: activeDroneProfile.maxWindSpeed,
             minTemperature: activeDroneProfile.minTemp,
             maxTemperature: activeDroneProfile.maxTemp,
@@ -99,7 +119,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
             description: e.message || "Impossible d'évaluer la sécurité du drone pour le moment.",
             variant: "destructive",
           });
-          setSafetyAssessment({ 
+          setSafetyAssessment({
             safeToFly: false,
             indicatorColor: 'RED',
             message: 'Erreur lors de l\'évaluation de la sécurité. Les conditions pourraient être inadaptées.'
@@ -110,7 +130,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
       };
       performAssessment();
     } else {
-      setSafetyAssessment(null); 
+      setSafetyAssessment(null);
     }
   }, [weatherData, activeDroneProfile, toast]);
 
@@ -136,7 +156,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     );
   }
 
-  if (isError && error) { // Afficher l'alerte d'erreur si react-query est en état d'erreur
+  if (isError && error) { 
     return (
       <Alert variant="destructive" className="mt-6 shadow-md">
         <AlertTriangle className="h-5 w-5" />
@@ -147,8 +167,6 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
   }
 
   if (!weatherData || !weatherData.current) {
-     // Ce cas peut se produire si la requête réussit (pas d'erreur réseau/serveur) mais que Meteosource ne renvoie pas de données `current`
-     // ou si weatherData est null après le chargement initial sans erreur explicite.
     return (
       <Alert variant="default" className="mt-6 shadow-md">
         <CloudOff className="h-5 w-5" />
