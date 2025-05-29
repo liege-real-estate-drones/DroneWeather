@@ -1,71 +1,36 @@
 "use client";
 
-import { MapContainer, TileLayer, Circle, Marker, useMapEvents } from 'react-leaflet';
-import type { LatLngExpression, Map as LeafletMapInstanceType } from 'leaflet';
-import L from 'leaflet';
+import { Map, AdvancedMarker, Circle } from '@vis.gl/react-google-maps';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-
-// Icon setup for Leaflet (idempotent for HMR)
-// This check ensures that the code runs only in the client-side environment.
-if (typeof window !== 'undefined') {
-  // Accessing L.Icon.Default.prototype can cause issues if Leaflet is not fully loaded
-  // or if this code runs in a non-browser environment during some build steps.
-  // It's generally safer to ensure Leaflet is loaded before modifying its prototypes.
-  // However, for the specific issue of icon paths, this is a common workaround.
-  const proto = L.Icon.Default.prototype as any;
-  if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) {
-    delete proto._getIconUrl;
-  }
-  L.Icon.Default.mergeOptions({
-    iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png').default,
-    iconUrl: require('leaflet/dist/images/marker-icon.png').default,
-    shadowUrl: require('leaflet/dist/images/marker-shadow.png').default,
-  });
-}
 
 interface MapComponentProps {
   selectedCoords: Coordinates | null;
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-// Component to handle map click events and update coordinates
-function LocationMarker({ onCoordsChange }: { onCoordsChange: (coords: Coordinates) => void; }) {
-  useMapEvents({
-    click(e) {
-      onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-    },
-  });
-  return null; // This component does not render anything itself
-}
-
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
-  // Ref to store the Leaflet map instance
-  const mapRef = useRef<LeafletMapInstanceType | null>(null);
-  
-  // Unique key to force re-creation of the map on HMR or other scenarios if needed.
-  // Using a symbol converted to string ensures it's unique per component instance.
-  const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
-  // Dynamic DOM ID for the map container to prevent conflicts if multiple maps were ever rendered.
-  const mapDomID = `map-container-${mapInstanceKey}`; 
 
-  // Effect to set isClient to true after component mounts, ensuring client-side only rendering for Leaflet.
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Determine the map's center position. Default to Belgium center if no coordinates are selected.
-  const position: LatLngExpression = selectedCoords
-    ? [selectedCoords.lat, selectedCoords.lng]
-    : [BELGIUM_CENTER.lat, BELGIUM_CENTER.lng];
+  // useMemo pour le centre et le zoom afin d'éviter des recalculs inutiles
+  // et pour rendre Map contrôlé si selectedCoords change
+  const mapCenter = useMemo(() => (
+    selectedCoords
+    ? { lat: selectedCoords.lat, lng: selectedCoords.lng }
+    : { lat: BELGIUM_CENTER.lat, lng: BELGIUM_CENTER.lng }
+  ), [selectedCoords]);
 
-  // Adjust zoom level based on whether coordinates are selected.
-  const zoom = selectedCoords ? DEFAULT_MAP_ZOOM + 2 : DEFAULT_MAP_ZOOM;
+  const mapZoom = useMemo(() => (
+    selectedCoords ? DEFAULT_MAP_ZOOM + 4 : DEFAULT_MAP_ZOOM // Google Maps zoom levels are different
+  ), [selectedCoords]);
 
-  // Show skeleton loader if not on client-side yet (prevents SSR issues with Leaflet)
+
   if (!isClient) {
     return (
       <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden flex items-center justify-center" data-ai-hint="interactive map loading">
@@ -74,51 +39,47 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
     );
   }
 
-  // Render the map once isClient is true
+  // Vous pouvez obtenir un Map ID depuis la Google Cloud Console pour des styles de carte personnalisés
+  // Pour l'instant, nous utiliserons le style par défaut, donc mapId peut être undefined.
+  // const mapId = "VOTRE_MAP_ID_PERSONNALISE"; // Optionnel
+
   return (
-    <div
-      key={mapInstanceKey} 
-      className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden"
-      data-ai-hint="interactive map"
-    >
-      {/* MapContainer is the main component for the Leaflet map */}
-      <MapContainer
-        ref={mapRef} // Assign the map instance to mapRef using the ref prop
-        id={mapDomID} 
-        key={mapInstanceKey} 
-        center={position}
-        zoom={zoom}
-        // The 'whenReady' prop expects a function with no arguments.
-        // The map instance is available via mapRef.current after this callback.
-        whenReady={() => { 
-          // You can perform actions here that depend on the map being ready.
-          // For example, logging that the map is ready and the ref is populated.
-          if (mapRef.current) {
-            console.log('Map is ready. Instance:', mapRef.current);
+    <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden" data-ai-hint="interactive map">
+      <Map
+        // mapId={mapId} // Décommentez si vous utilisez un Map ID personnalisé
+        style={{ width: '100%', height: '100%' }}
+        center={mapCenter}
+        zoom={mapZoom}
+        gestureHandling={'greedy'} // Comportement de zoom/pan plus permissif
+        disableDefaultUI={false}   // Afficher les contrôles UI par défaut de Google Maps (zoom, etc.)
+        mapTypeControl={false}     // Cacher le contrôle de type de carte (satellite/plan)
+        streetViewControl={false}  // Cacher le contrôle Street View
+        fullscreenControl={false}  // Cacher le contrôle plein écran
+        clickableIcons={false}     // Empêcher le clic sur les icônes POI par défaut de Google Maps
+        onClick={(e: { detail: { latLng: { lat: any; lng: any; }; }; }) => {
+          if (e.detail.latLng) {
+            onCoordsChange({ lat: e.detail.latLng.lat, lng: e.detail.latLng.lng });
           }
         }}
-        scrollWheelZoom={true}
-        style={{ height: '100%', width: '100%' }}
       >
-        {/* TileLayer for the OpenStreetMap tiles */}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        {/* Display Circle and Marker if coordinates are selected */}
         {selectedCoords && (
           <>
-            <Circle
-              center={[selectedCoords.lat, selectedCoords.lng]}
-              radius={200} 
-              pathOptions={{ color: 'var(--accent)', fillColor: 'var(--accent)', fillOpacity: 0.3 }}
+            <AdvancedMarker 
+              position={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
+              title={'Selected Location'}
             />
-            <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
+            <Circle
+              center={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
+              radius={200} // en mètres
+              strokeColor={'#FFB866'} // Couleur d'accentuation (peut aussi utiliser var(--accent) si CSS est configuré pour)
+              strokeOpacity={0.8}
+              strokeWeight={2}
+              fillColor={'#FFB866'}   // Couleur d'accentuation
+              fillOpacity={0.35}
+            />
           </>
         )}
-        {/* Component to handle map click events */}
-        <LocationMarker onCoordsChange={onCoordsChange} />
-      </MapContainer>
+      </Map>
     </div>
   );
 }

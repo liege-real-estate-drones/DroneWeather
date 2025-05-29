@@ -1,6 +1,6 @@
 // src/app/api/weather/route.ts
 import { NextResponse } from 'next/server';
-import type { MeteosourceErrorResponse } from '@/types'; // Assurez-vous d'avoir ce type
+import type { MeteosourceErrorResponse } from '@/types'; 
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -11,7 +11,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Les coordonnées de latitude et longitude sont requises.' }, { status: 400 });
   }
 
-  // Validation simple des coordonnées (Meteosource validera plus en détail)
   const numLat = parseFloat(lat);
   const numLon = parseFloat(lon);
   if (isNaN(numLat) || isNaN(numLon) || numLat < -90 || numLat > 90 || numLon < -180 || numLon > 180) {
@@ -25,7 +24,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Le service météo n\'est pas configuré sur le serveur. Veuillez contacter l\'administrateur.' }, { status: 500 });
   }
 
-  const meteosourceUrl = `https://www.meteosource.com/api/v1/free/point?lat=${lat}&lon=${lon}&sections=current,hourly&language=fr&units=metric&key=${apiKey}`;
+  // Modification ici: language=en au lieu de language=fr
+  const meteosourceUrl = `https://www.meteosource.com/api/v1/free/point?lat=${lat}&lon=${lon}&sections=current,hourly&language=en&units=metric&key=${apiKey}`;
 
   try {
     const meteoResponse = await fetch(meteosourceUrl);
@@ -34,7 +34,6 @@ export async function GET(request: Request) {
       let errorMessage = `Erreur API Meteosource : ${meteoResponse.status}`;
       try {
         const externalError = await meteoResponse.json() as MeteosourceErrorResponse;
-        // Log de l'erreur complète côté serveur pour le débogage
         console.error(`Erreur détaillée de Meteosource (${meteoResponse.status}):`, JSON.stringify(externalError, null, 2));
 
         if (externalError.error) {
@@ -49,9 +48,8 @@ export async function GET(request: Request) {
           }
         }
       } catch (e) {
-        // Si le corps de l'erreur n'est pas JSON ou si l'analyse échoue
         console.warn('Impossible d\'analyser la réponse d\'erreur JSON de Meteosource:', e);
-        const textError = await meteoResponse.text(); // Tenter de lire comme texte
+        const textError = await meteoResponse.text(); 
         console.error('Réponse d\'erreur brute de Meteosource:', textError);
         errorMessage = `Erreur API Meteosource (${meteoResponse.status}). Impossible d'analyser les détails de l'erreur. Réponse brute: ${textError.substring(0,100)}`;
       }

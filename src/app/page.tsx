@@ -2,17 +2,17 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-// import ApiKeyInput from '@/components/ApiKeyInput'; // REMOVED
 import WeatherInfoComponent from '@/components/WeatherInfoComponent';
 import DroneProfileSelector from '@/components/DroneProfileSelector';
 import CustomDroneParamsForm from '@/components/CustomDroneParamsForm';
-import { DEFAULT_DRONE_PROFILES, DJI_MINI_4_PRO_PROFILE, DRONE_MODELS } from '@/lib/constants';
+import { DEFAULT_DRONE_PROFILES, DJI_MINI_4_PRO_PROFILE, DRONE_MODELS, BELGIUM_CENTER } from '@/lib/constants'; // Ajout de BELGIUM_CENTER
 import type { Coordinates, DroneProfile } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { PlaneTakeoff } from 'lucide-react';
+import { PlaneTakeoff, MapPinOff } from 'lucide-react'; // Ajout de MapPinOff
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
+import { APIProvider } from '@vis.gl/react-google-maps'; // IMPORTATION AJOUTÉE
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -20,28 +20,24 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 });
 
 export default function HomePage() {
-  // const [apiKey, setApiKey] = useState<string | null>(null); // REMOVED
-  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
+  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null); // Initialisation à null
   const [selectedDroneModel, setSelectedDroneModel] = useState<string>(DRONE_MODELS.MINI_4_PRO);
   const [customDroneParams, setCustomDroneParams] = useState<Omit<DroneProfile, 'name'>>(DJI_MINI_4_PRO_PROFILE);
   const [isClient, setIsClient] = useState(false);
   const { toast } = useToast();
 
+  // Récupération de la clé API Google Maps depuis les variables d'environnement
+  const googleMapsApiKey = process.env.NEXT_PUBLIC_Maps_API_KEY;
+
   useEffect(() => {
     setIsClient(true);
-    // const storedApiKey = localStorage.getItem('meteosourceApiKey'); // REMOVED
-    // if (storedApiKey) { // REMOVED
-    //   setApiKey(storedApiKey); // REMOVED
-    // } // REMOVED
+    // Initialiser les coordonnées au centre de la Belgique si aucune n'est sélectionnée
+    // Cela peut être utile pour avoir un point de départ dès le chargement
+    // if (!selectedCoords) {
+    // setSelectedCoords(BELGIUM_CENTER);
+    // }
   }, []);
 
-  // const handleApiKeyChange = (newApiKey: string) => { // REMOVED
-  //   setApiKey(newApiKey); // REMOVED
-  //   if (isClient) { // REMOVED
-  //     localStorage.setItem('meteosourceApiKey', newApiKey); // REMOVED
-  //   } // REMOVED
-  //   toast({ title: "API Key Saved", description: "Your Meteosource API key has been saved locally." }); // REMOVED
-  // }; // REMOVED
 
   const handleCoordsChange = (coords: Coordinates) => {
     setSelectedCoords(coords);
@@ -59,7 +55,7 @@ export default function HomePage() {
 
   const handleCustomParamsSubmit = (data: Omit<DroneProfile, 'name'>) => {
     setCustomDroneParams(data);
-    toast({ title: "Custom Parameters Saved", description: "Your custom drone parameters are now active." });
+    toast({ title: "Paramètres personnalisés sauvegardés", description: "Vos paramètres de drone personnalisés sont maintenant actifs." });
   };
 
   const activeDroneProfile: DroneProfile = useMemo(() => {
@@ -67,7 +63,7 @@ export default function HomePage() {
       return { name: DRONE_MODELS.CUSTOM, ...customDroneParams };
     }
     const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === selectedDroneModel);
-    return profile || { name: selectedDroneModel, ...customDroneParams }; // Fallback, should always find one
+    return profile || { name: selectedDroneModel, ...customDroneParams }; 
   }, [selectedDroneModel, customDroneParams]);
 
 
@@ -75,66 +71,80 @@ export default function HomePage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
         <PlaneTakeoff size={64} className="text-primary animate-pulse mb-4" />
-        <p className="text-xl text-muted-foreground">Loading DroneWeather App...</p>
+        <p className="text-xl text-muted-foreground">Chargement de DroneWeather...</p>
+      </div>
+    );
+  }
+
+  if (!googleMapsApiKey) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
+        <MapPinOff size={64} className="text-destructive mb-4" />
+        <h2 className="text-2xl font-semibold text-destructive mb-2">Configuration requise</h2>
+        <p className="text-lg text-muted-foreground">
+          La clé API Google Maps est manquante.
+        </p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Veuillez définir la variable d'environnement <code className="bg-muted px-1 py-0.5 rounded">NEXT_PUBLIC_Maps_API_KEY</code>.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-background to-muted/30">
-      <header className="mb-6">
-        <h1 className="text-4xl font-bold text-primary flex items-center gap-2">
-          <PlaneTakeoff size={40} />
-          DroneWeather
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          Tailored weather information for drone pilots in Belgium.
-        </p>
-      </header>
+    <APIProvider apiKey={googleMapsApiKey}>
+      <div className="min-h-screen flex flex-col p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-background to-muted/30">
+        <header className="mb-6">
+          <h1 className="text-4xl font-bold text-primary flex items-center gap-2">
+            <PlaneTakeoff size={40} />
+            DroneWeather
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            Informations météo adaptées pour les pilotes de drone en Belgique.
+          </p>
+        </header>
 
-      {/* <ApiKeyInput apiKey={apiKey} onApiKeyChange={handleApiKeyChange} /> */} {/* REMOVED */}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow">
-        <aside className="lg:col-span-1 space-y-6">
-          <DroneProfileSelector
-            selectedModel={selectedDroneModel}
-            onModelChange={handleDroneModelChange}
-          />
-          {selectedDroneModel === DRONE_MODELS.CUSTOM && (
-            <CustomDroneParamsForm
-              initialValues={customDroneParams}
-              onSubmit={handleCustomParamsSubmit}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow">
+          <aside className="lg:col-span-1 space-y-6">
+            <DroneProfileSelector
+              selectedModel={selectedDroneModel}
+              onModelChange={handleDroneModelChange}
             />
-          )}
-           <Separator className="my-4" />
-           <div className="p-4 bg-card rounded-lg shadow-md">
-             <h3 className="font-semibold text-lg mb-2">Active Profile: {activeDroneProfile.name}</h3>
-             <ul className="text-sm space-y-1 text-muted-foreground">
-                <li>Max Wind: {activeDroneProfile.maxWindSpeed} m/s</li>
-                <li>Temp Range: {activeDroneProfile.minTemp}°C to {activeDroneProfile.maxTemp}°C</li>
-             </ul>
-           </div>
-        </aside>
+            {selectedDroneModel === DRONE_MODELS.CUSTOM && (
+              <CustomDroneParamsForm
+                initialValues={customDroneParams}
+                onSubmit={handleCustomParamsSubmit}
+              />
+            )}
+            <Separator className="my-4" />
+            <div className="p-4 bg-card rounded-lg shadow-md">
+              <h3 className="font-semibold text-lg mb-2">Profil Actif : {activeDroneProfile.name}</h3>
+              <ul className="text-sm space-y-1 text-muted-foreground">
+                  <li>Vent max : {activeDroneProfile.maxWindSpeed} m/s</li>
+                  <li>Plage Temp. : {activeDroneProfile.minTemp}°C à {activeDroneProfile.maxTemp}°C</li>
+              </ul>
+            </div>
+          </aside>
 
-        <main className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="md:col-span-1 h-[400px] md:h-auto">
-            <MapComponent selectedCoords={selectedCoords} onCoordsChange={handleCoordsChange} />
-          </div>
-          <div className="md:col-span-1">
-            <WeatherInfoComponent
-              // apiKey={apiKey} // REMOVED
-              coords={selectedCoords}
-              activeDroneProfile={activeDroneProfile}
-            />
-          </div>
-        </main>
+          <main className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="md:col-span-1 h-[400px] md:h-auto">
+              <MapComponent selectedCoords={selectedCoords} onCoordsChange={handleCoordsChange} />
+            </div>
+            <div className="md:col-span-1">
+              <WeatherInfoComponent
+                coords={selectedCoords}
+                activeDroneProfile={activeDroneProfile}
+              />
+            </div>
+          </main>
+        </div>
+        <footer className="text-center mt-8 py-4 border-t">
+          <p className="text-sm text-muted-foreground">
+            Propulsé par <a href="https://www.meteosource.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Meteosource</a> et Google AI. Carte par Google Maps.
+          </p>
+        </footer>
+        <Toaster />
       </div>
-       <footer className="text-center mt-8 py-4 border-t">
-        <p className="text-sm text-muted-foreground">
-          Powered by <a href="https://www.meteosource.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Meteosource</a> and Genkit AI.
-        </p>
-      </footer>
-      <Toaster />
-    </div>
+    </APIProvider>
   );
 }
