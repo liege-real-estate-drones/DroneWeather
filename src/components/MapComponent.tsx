@@ -1,11 +1,78 @@
 
 "use client";
 
-import { Map, AdvancedMarker, Circle, MapMouseEvent } from '@vis.gl/react-google-maps';
+import { Map, AdvancedMarker, MapMouseEvent, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
-import { useMemo } from 'react';
-import { Skeleton } from '@/components/ui/skeleton'; // Gardé pour le cas où le parent ne gérerait pas le chargement
+import { useMemo, useEffect, useState } from 'react'; // Added useEffect, useState
+
+interface MapCircleOverlayProps {
+  center: google.maps.LatLngLiteral;
+  radius: number;
+  strokeColor: string;
+  strokeOpacity: number;
+  strokeWeight: number;
+  fillColor: string;
+  fillOpacity: number;
+}
+
+function MapCircleOverlay({
+  center,
+  radius,
+  strokeColor,
+  strokeOpacity,
+  strokeWeight,
+  fillColor,
+  fillOpacity,
+}: MapCircleOverlayProps) {
+  const map = useMap();
+  const mapsLib = useMapsLibrary('maps');
+  const [circle, setCircle] = useState<google.maps.Circle | null>(null);
+
+  useEffect(() => {
+    if (!map || !mapsLib) {
+      return;
+    }
+
+    if (!circle) {
+      const newCircle = new mapsLib.Circle({
+        map,
+        center,
+        radius,
+        strokeColor,
+        strokeOpacity,
+        strokeWeight,
+        fillColor,
+        fillOpacity,
+        clickable: false, // Usually circles are not clickable unless specified
+      });
+      setCircle(newCircle);
+    } else {
+      // Update existing circle
+      circle.setOptions({
+        center,
+        radius,
+        strokeColor,
+        strokeOpacity,
+        strokeWeight,
+        fillColor,
+        fillOpacity,
+      });
+    }
+
+    // Cleanup function to remove the circle when the component unmounts
+    // or when dependencies that would nullify it change (e.g., map becomes null)
+    return () => {
+      if (circle) {
+        circle.setMap(null);
+      }
+    };
+  }, [map, mapsLib, circle, center, radius, strokeColor, strokeOpacity, strokeWeight, fillColor, fillOpacity]);
+
+  // This component doesn't render any JSX itself, it manipulates the map imperatively.
+  return null;
+}
+
 
 interface MapComponentProps {
   selectedCoords: Coordinates | null;
@@ -20,12 +87,8 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   ), [selectedCoords]);
 
   const zoom = useMemo(() => (
-    selectedCoords ? DEFAULT_MAP_ZOOM + 4 : DEFAULT_MAP_ZOOM // Google Maps zoom levels (e.g., 8 for country, 12 for area)
+    selectedCoords ? DEFAULT_MAP_ZOOM + 4 : DEFAULT_MAP_ZOOM
   ), [selectedCoords]);
-
-  // HomePage gère l'état isClient, donc ce composant suppose qu'il est monté côté client.
-  // Si ce n'est pas le cas, un Skeleton simple peut être affiché si selectedCoords n'est pas défini, par exemple.
-  // Toutefois, la logique de chargement principale est dans HomePage.
 
   return (
     <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden" data-ai-hint="interactive google map">
@@ -38,8 +101,8 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         mapTypeControl={false}
         streetViewControl={false}
         fullscreenControl={false}
-        clickableIcons={false} // Empêche le clic sur les POI par défaut de Google Maps
-        mapId="droneWeatherMapStyle" // Vous pouvez ajouter un Map ID pour des styles personnalisés
+        clickableIcons={false}
+        mapId="droneWeatherMapStyle"
         onClick={(e: MapMouseEvent) => {
           if (e.detail?.latLng) {
             onCoordsChange({ lat: e.detail.latLng.lat, lng: e.detail.latLng.lng });
@@ -52,13 +115,13 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
               position={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
               title={'Selected Location'}
             />
-            <Circle
+            <MapCircleOverlay
               center={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
-              radius={200} // en mètres
-              strokeColor={'#FFB866'} // Couleur d'accentuation (Jaune-Orange)
+              radius={200} // in meters
+              strokeColor={'#FFB866'} // Accent color
               strokeOpacity={0.8}
               strokeWeight={2}
-              fillColor={'#FFB866'}   // Couleur d'accentuation
+              fillColor={'#FFB866'}   // Accent color
               fillOpacity={0.35}
             />
           </>
