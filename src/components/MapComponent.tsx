@@ -2,7 +2,7 @@
 "use client";
 
 import { MapContainer, TileLayer, Circle, Marker, useMapEvents } from 'react-leaflet';
-import type { LatLngExpression, Map as LeafletMap } from 'leaflet'; // Import Map as LeafletMap
+import type { LatLngExpression, Map as LeafletMapInstanceType } from 'leaflet'; // Import Map as LeafletMapInstanceType
 import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
@@ -38,6 +38,7 @@ function LocationMarker({ onCoordsChange }: { onCoordsChange: (coords: Coordinat
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
+  const mapRef = useRef<LeafletMapInstanceType | null>(null);
   
   // This key changes every time MapComponent.tsx is hot-reloaded, forcing React to treat
   // the keyed components as new instances, triggering unmount/mount cycles.
@@ -47,6 +48,17 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  useEffect(() => {
+    // Cleanup function to remove the map instance
+    return () => {
+      const currentMap = mapRef.current;
+      if (currentMap) {
+        currentMap.remove();
+        // mapRef.current = null; // Optional: clear the ref
+      }
+    };
+  }, [mapInstanceKey]); // Dependency array includes mapInstanceKey
 
   const position: LatLngExpression = selectedCoords
     ? [selectedCoords.lat, selectedCoords.lng]
@@ -74,6 +86,9 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
           key={mapInstanceKey} // Key on MapContainer itself ensures this specific component instance is replaced
           center={position}
           zoom={zoom}
+          whenCreated={(mapInstance) => { // Add whenCreated prop
+            mapRef.current = mapInstance;
+          }}
           scrollWheelZoom={true}
           style={{ height: '100%', width: '100%' }}
         >
