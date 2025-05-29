@@ -42,6 +42,14 @@ function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerP
     },
   });
 
+  // Effect to move map when selectedCoords change from outside (e.g. initial load, search)
+  useEffect(() => {
+    if (selectedCoords && map) {
+      map.flyTo([selectedCoords.lat, selectedCoords.lng], map.getZoom());
+    }
+  }, [selectedCoords, map]);
+
+
   return selectedCoords === null ? null : (
      <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
   );
@@ -74,7 +82,11 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   }
 
   return (
-    <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden" data-ai-hint="interactive map">
+    <div 
+      key={mapInstanceKey} // Add key to the parent div as well
+      className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden" 
+      data-ai-hint="interactive map"
+    >
       <MapContainer
         id={mapDomID} // Assign the dynamic ID to the map container
         key={mapInstanceKey} // Keep this key for React's unmount/remount
