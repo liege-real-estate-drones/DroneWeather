@@ -9,13 +9,20 @@ import type { Coordinates } from '@/types';
 import { useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// Fix for default icon path issue with Webpack
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
+// Fix for default icon path issue with Webpack, made idempotent for HMR
+if (typeof window !== 'undefined') {
+  const proto = L.Icon.Default.prototype as any;
+  // Check if the property exists before attempting to delete it.
+  // This makes the setup more robust if the module is re-executed by HMR.
+  if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) {
+    delete proto._getIconUrl;
+  }
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  });
+}
 
 interface MapComponentProps {
   selectedCoords: Coordinates | null;
@@ -31,8 +38,7 @@ function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerP
   const map = useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-      // Removed map.flyTo - MapContainer's center prop will handle re-centering.
-      // Ensure map.flyTo exists before calling it - This check is now also removed as flyTo is removed.
+      // Rely on MapContainer's center prop to update the map view.
     },
   });
 
