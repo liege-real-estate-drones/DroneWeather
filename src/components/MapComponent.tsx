@@ -3,7 +3,7 @@
 
 import { MapContainer, TileLayer, Marker, useMapEvents, Circle } from 'react-leaflet';
 import type { LatLngExpression } from 'leaflet';
-import L from 'leaflet';
+import L from 'leaflet'; // Standard Leaflet import
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
 import { useRef, useState, useEffect } from 'react';
@@ -47,7 +47,6 @@ function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerP
   );
 }
 
-
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
 
@@ -64,7 +63,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   // This key forces React to unmount and remount MapContainer on HMR if MapComponent.tsx changes.
   // It remains stable during normal prop-driven re-renders.
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
-
+  const mapDomID = `leaflet-map-${mapInstanceKey}`; // Generate a unique DOM ID based on the instance key
 
   if (!isClient) {
     return (
@@ -77,7 +76,8 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   return (
     <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden" data-ai-hint="interactive map">
       <MapContainer
-        key={mapInstanceKey} 
+        id={mapDomID} // Assign the dynamic ID to the map container
+        key={mapInstanceKey} // Keep this key for React's unmount/remount
         center={position}
         zoom={zoom}
         scrollWheelZoom={true}
