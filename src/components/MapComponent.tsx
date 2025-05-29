@@ -2,7 +2,7 @@
 "use client";
 
 import { MapContainer, TileLayer, Circle, Marker, useMapEvents } from 'react-leaflet';
-import type { LatLngExpression, Map as LeafletMapType } from 'leaflet';
+import type { LatLngExpression, Map as LeafletMapType } from 'leaflet'; // Aliased import
 import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
@@ -27,22 +27,21 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
+// Moved LocationMarker outside to be a standalone component
 function LocationMarker({
-  currentSelectedCoords,
   onCoordsChange,
 }: {
-  currentSelectedCoords: Coordinates | null;
   onCoordsChange: (coords: Coordinates) => void;
 }) {
-  useMapEvents({
+  const map = useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
+      // No flyTo here, MapContainer handles center changes declaratively
     },
   });
 
-  return currentSelectedCoords === null ? null : (
-    <Marker position={[currentSelectedCoords.lat, currentSelectedCoords.lng]} />
-  );
+  // Marker is now controlled by selectedCoords in the parent MapComponent
+  return null;
 }
 
 
@@ -57,7 +56,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
     setIsClient(true);
   }, []);
 
-  // Effect for cleaning up the map instance
+  // Effect for cleaning up the map instance, tied to mapInstanceKey
   useEffect(() => {
     const mapInstanceToClean = mapRef.current; 
     const effectKey = mapInstanceKey; // Capture the key associated with this map instance for logging
@@ -126,7 +125,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   return (
     <div
-      key={mapInstanceKey} // Key on the parent div to ensure full DOM replacement on HMR
+      // key removed from parent div
       className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden"
       data-ai-hint="interactive map"
     >
@@ -138,7 +137,6 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         style={{ height: '100%', width: '100%' }}
         whenCreated={(mapInstance) => {
           mapRef.current = mapInstance;
-          // Log when a new map instance is created and its container's _leaflet_id
           const container = mapInstance.getContainer();
           console.log(`[MapEffect ${mapInstanceKey}] whenCreated - New map instance assigned to ref for key ${mapInstanceKey}. Container _leaflet_id: ${container?._leaflet_id}`);
         }}
@@ -148,14 +146,18 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         {selectedCoords && (
-          <Circle
-            center={[selectedCoords.lat, selectedCoords.lng]}
-            radius={200}
-            pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} // Use direct color values
-          />
+          <>
+            <Circle
+              center={[selectedCoords.lat, selectedCoords.lng]}
+              radius={200}
+              pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} 
+            />
+            <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
+          </>
         )}
-        <LocationMarker currentSelectedCoords={selectedCoords} onCoordsChange={onCoordsChange} />
+        <LocationMarker onCoordsChange={onCoordsChange} />
       </MapContainer>
     </div>
   );
 }
+
