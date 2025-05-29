@@ -6,7 +6,8 @@ import type { LatLngExpression } from 'leaflet';
 import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
-import { useRef } from 'react'; // Import useRef
+import { useRef, useState, useEffect } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Fix for default icon path issue with Webpack
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -21,7 +22,6 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-// Renamed to avoid conflict and clarify props
 interface LocationMarkerInnerProps {
   selectedCoords: Coordinates | null;
   onCoordsChange: (coords: Coordinates) => void;
@@ -31,7 +31,10 @@ function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerP
   const map = useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-      map.flyTo(e.latlng, map.getZoom());
+      // Ensure map.flyTo exists before calling it
+      if (map && typeof map.flyTo === 'function') {
+        map.flyTo(e.latlng, map.getZoom());
+      }
     },
   });
 
@@ -42,20 +45,34 @@ function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerP
 
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   const position: LatLngExpression = selectedCoords
     ? [selectedCoords.lat, selectedCoords.lng]
     : [BELGIUM_CENTER.lat, BELGIUM_CENTER.lng];
 
   const zoom = selectedCoords ? DEFAULT_MAP_ZOOM + 2 : DEFAULT_MAP_ZOOM;
 
-  // Generate a key that is stable across re-renders of this component instance,
-  // but changes if the MapComponent module itself is re-evaluated (e.g., by HMR).
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
+
+  if (!isClient) {
+    // Render a skeleton or null while waiting for the client to be ready
+    // This matches the loading state used if MapComponent were dynamically imported with a loader
+    return (
+      <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden flex items-center justify-center" data-ai-hint="interactive map loading">
+        <Skeleton className="h-full w-full rounded-lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden" data-ai-hint="interactive map">
       <MapContainer
-        key={mapInstanceKey} // Add key here
+        key={mapInstanceKey} 
         center={position}
         zoom={zoom}
         scrollWheelZoom={true}
