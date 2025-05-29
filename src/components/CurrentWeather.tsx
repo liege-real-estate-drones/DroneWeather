@@ -23,8 +23,6 @@ const getWeatherIconUrl = (iconCode: string | number | undefined | null, summary
   } 
   
   // WMO Weather interpretation codes (Numbers from Open-Meteo)
-  // Simplified mapping for placeholder text hints.
-  // You might want to map these to actual icons (e.g., Lucide icons) or more descriptive hints.
   if ([0, 1].includes(iconCode)) hint = "sun clear";
   else if ([2, 3].includes(iconCode)) hint = "cloud partly";
   else if ([45, 48].includes(iconCode)) hint = "fog";
@@ -53,6 +51,15 @@ export default function CurrentWeather({ data }: CurrentWeatherProps) {
   
   const visibilityInKm = typeof data.visibility?.total === 'number' ? data.visibility.total / 1000 : null;
 
+  const windSpeedDisplay = displayValue(data.wind?.speed, " m/s");
+  let gustValueForDisplay: number | null = null;
+  if (typeof data.wind?.gust === 'number') {
+    gustValueForDisplay = data.wind.gust;
+  } else if (typeof data.wind?.speed === 'number') { // Fallback if gust is null/undefined but speed is available
+    gustValueForDisplay = data.wind.speed;
+  }
+  const windGustDisplay = displayValue(gustValueForDisplay, " m/s");
+
   return (
     <Card className="shadow-lg">
       <CardHeader>
@@ -67,7 +74,7 @@ export default function CurrentWeather({ data }: CurrentWeatherProps) {
               alt={data.summary || 'Weather icon'} 
               width={64} 
               height={64} 
-              data-ai-hint="weather icon" // Updated hint based on actual icon or WMO code
+              data-ai-hint={typeof data.weather_icon_code === 'string' ? data.summary || "weather icon" : `wmo ${data.weather_icon_code}`}
               className="rounded-md"
               unoptimized={typeof data.weather_icon_code === 'string'} // OWM icons are already optimized
             />
@@ -81,7 +88,7 @@ export default function CurrentWeather({ data }: CurrentWeatherProps) {
         </div>
         <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-md" title="Wind Speed and Gusts">
           <Wind className="text-primary" />
-          <span>Wind: {displayValue(data.wind?.speed, " m/s")} (Gusts: {displayValue(data.wind?.gust, " m/s")})</span>
+          <span>Wind: {windSpeedDisplay} (Gusts: {windGustDisplay})</span>
         </div>
         <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-md" title="Wind Direction">
           <Navigation className="text-primary" style={{ transform: `rotate(${typeof data.wind?.angle === 'number' ? data.wind.angle : 0}deg)` }} />

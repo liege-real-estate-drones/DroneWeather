@@ -43,6 +43,16 @@ export default function HourlyWeatherCard({ data }: HourlyWeatherCardProps) {
 
   const visibilityInKm = typeof data.visibility?.total === 'number' ? data.visibility.total / 1000 : null;
 
+  const windSpeedDisplay = displayValue(data.wind?.speed, "m/s");
+  let gustValueForDisplay: number | null = null;
+  if (typeof data.wind?.gust === 'number') {
+    gustValueForDisplay = data.wind.gust;
+  } else if (typeof data.wind?.speed === 'number') { // Fallback if gust is null/undefined but speed is available
+    gustValueForDisplay = data.wind.speed;
+  }
+  const windGustDisplay = displayValue(gustValueForDisplay, "m/s");
+
+
   return (
     <Card className="shadow-md h-full flex flex-col">
       <CardHeader className="pb-2 pt-4">
@@ -54,7 +64,7 @@ export default function HourlyWeatherCard({ data }: HourlyWeatherCardProps) {
               alt={data.summary || 'Weather icon'} 
               width={48} 
               height={48}
-              data-ai-hint="weather icon small" // Updated hint
+              data-ai-hint={typeof data.weather_icon_code === 'string' ? data.summary || "weather icon small" : `wmo small ${data.weather_icon_code}`}
               className="rounded-md"
               unoptimized={typeof data.weather_icon_code === 'string'} // OWM icons are already optimized
             />
@@ -69,7 +79,7 @@ export default function HourlyWeatherCard({ data }: HourlyWeatherCardProps) {
         </div>
         <div className="flex items-center gap-1" title="Wind Speed and Gusts">
           <Wind size={16} className="text-primary" />
-          <span>{displayValue(data.wind?.speed, "m/s")} (Gusts: {displayValue(data.wind?.gust, "m/s")})</span>
+          <span>{windSpeedDisplay} (Gusts: {windGustDisplay})</span>
         </div>
          <div className="flex items-center gap-1" title="Precipitation">
           <Umbrella size={16} className="text-primary" />
