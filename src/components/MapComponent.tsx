@@ -27,40 +27,43 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-/*
-function LocationMarker({ onCoordsChange, selectedCoords }: { onCoordsChange: (coords: Coordinates) => void; selectedCoords: Coordinates | null; }) {
-  const map = useMapEvents({
+function LocationMarkerInternal({ onCoordsChange }: { onCoordsChange: (coords: Coordinates) => void; }) {
+  useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
     },
   });
-
-  return selectedCoords ? <Marker position={[selectedCoords.lat, selectedCoords.lng]} /> : null;
+  return null; // This component does not render anything itself
 }
-*/
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
   const [renderMap, setRenderMap] = useState(false);
   
+  // This key changes every time MapComponent.tsx is hot-reloaded, forcing React to treat
+  // the keyed components as new instances, triggering unmount/mount cycles.
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
-  const mapDomID = `map-container-${mapInstanceKey}`;
+  const mapDomID = `map-container-${mapInstanceKey}`; // Generate a dynamic DOM ID for the map container
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
   useEffect(() => {
+    let timerId: NodeJS.Timeout | undefined;
     if (isClient) {
+      // Ensure previous map is unmounted before rendering a new one by toggling renderMap
       setRenderMap(false); 
-      const timer = setTimeout(() => {
+      timerId = setTimeout(() => {
         setRenderMap(true);
-      }, 50); 
-      return () => {
-        clearTimeout(timer);
-      };
+      }, 50); // Small delay to allow potential cleanup
     }
-  }, [isClient, mapInstanceKey]);
+    return () => {
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+    };
+  }, [isClient, mapInstanceKey]); // Re-run if mapInstanceKey changes (HMR) or on initial client mount
 
   const position: LatLngExpression = selectedCoords
     ? [selectedCoords.lat, selectedCoords.lng]
@@ -78,32 +81,34 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   return (
     <div
-      key={mapInstanceKey} // Key on the PARENT div
+      key={mapInstanceKey} // Key on the PARENT div ensures its whole tree is replaced during HMR
       className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden"
       data-ai-hint="interactive map"
     >
       {isClient && renderMap && ( 
         <MapContainer
-          id={mapDomID} 
-          key={mapInstanceKey} // AND Key on MapContainer itself
+          id={mapDomID} // Assign the dynamic ID to the map container
+          key={mapInstanceKey} // Key on MapContainer itself ensures this specific component instance is replaced
           center={position}
           zoom={zoom}
           scrollWheelZoom={true}
           style={{ height: '100%', width: '100%' }}
-          // No whenCreated, no mapRef for manual cleanup
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          {/* {selectedCoords && (
-            <Circle
-              center={[selectedCoords.lat, selectedCoords.lng]}
-              radius={200}
-              pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} 
-            />
+          {selectedCoords && (
+            <>
+              <Circle
+                center={[selectedCoords.lat, selectedCoords.lng]}
+                radius={200} // meters
+                pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} // Accent color
+              />
+              <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
+            </>
           )}
-          <LocationMarker onCoordsChange={onCoordsChange} selectedCoords={selectedCoords} /> */}
+          <LocationMarkerInternal onCoordsChange={onCoordsChange} />
         </MapContainer>
       )}
     </div>
