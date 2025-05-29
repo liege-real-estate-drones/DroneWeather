@@ -31,10 +31,8 @@ function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerP
   const map = useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-      // Ensure map.flyTo exists before calling it
-      if (map && typeof map.flyTo === 'function') {
-        map.flyTo(e.latlng, map.getZoom());
-      }
+      // Removed map.flyTo - MapContainer's center prop will handle re-centering.
+      // Ensure map.flyTo exists before calling it - This check is now also removed as flyTo is removed.
     },
   });
 
@@ -57,11 +55,12 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   const zoom = selectedCoords ? DEFAULT_MAP_ZOOM + 2 : DEFAULT_MAP_ZOOM;
 
+  // This key forces React to unmount and remount MapContainer on HMR if MapComponent.tsx changes.
+  // It remains stable during normal prop-driven re-renders.
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
 
+
   if (!isClient) {
-    // Render a skeleton or null while waiting for the client to be ready
-    // This matches the loading state used if MapComponent were dynamically imported with a loader
     return (
       <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden flex items-center justify-center" data-ai-hint="interactive map loading">
         <Skeleton className="h-full w-full rounded-lg" />
@@ -94,4 +93,3 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
     </div>
   );
 }
-
