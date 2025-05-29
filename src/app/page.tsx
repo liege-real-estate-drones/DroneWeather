@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import ApiKeyInput from '@/components/ApiKeyInput';
+// import ApiKeyInput from '@/components/ApiKeyInput'; // REMOVED
 import WeatherInfoComponent from '@/components/WeatherInfoComponent';
 import DroneProfileSelector from '@/components/DroneProfileSelector';
 import CustomDroneParamsForm from '@/components/CustomDroneParamsForm';
@@ -20,7 +20,7 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 });
 
 export default function HomePage() {
-  const [apiKey, setApiKey] = useState<string | null>(null);
+  // const [apiKey, setApiKey] = useState<string | null>(null); // REMOVED
   const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
   const [selectedDroneModel, setSelectedDroneModel] = useState<string>(DRONE_MODELS.MINI_4_PRO);
   const [customDroneParams, setCustomDroneParams] = useState<Omit<DroneProfile, 'name'>>(DJI_MINI_4_PRO_PROFILE);
@@ -29,19 +29,19 @@ export default function HomePage() {
 
   useEffect(() => {
     setIsClient(true);
-    const storedApiKey = localStorage.getItem('meteosourceApiKey');
-    if (storedApiKey) {
-      setApiKey(storedApiKey);
-    }
+    // const storedApiKey = localStorage.getItem('meteosourceApiKey'); // REMOVED
+    // if (storedApiKey) { // REMOVED
+    //   setApiKey(storedApiKey); // REMOVED
+    // } // REMOVED
   }, []);
 
-  const handleApiKeyChange = (newApiKey: string) => {
-    setApiKey(newApiKey);
-    if (isClient) {
-      localStorage.setItem('meteosourceApiKey', newApiKey);
-    }
-    toast({ title: "API Key Saved", description: "Your Meteosource API key has been saved locally." });
-  };
+  // const handleApiKeyChange = (newApiKey: string) => { // REMOVED
+  //   setApiKey(newApiKey); // REMOVED
+  //   if (isClient) { // REMOVED
+  //     localStorage.setItem('meteosourceApiKey', newApiKey); // REMOVED
+  //   } // REMOVED
+  //   toast({ title: "API Key Saved", description: "Your Meteosource API key has been saved locally." }); // REMOVED
+  // }; // REMOVED
 
   const handleCoordsChange = (coords: Coordinates) => {
     setSelectedCoords(coords);
@@ -92,7 +92,7 @@ export default function HomePage() {
         </p>
       </header>
 
-      <ApiKeyInput apiKey={apiKey} onApiKeyChange={handleApiKeyChange} />
+      {/* <ApiKeyInput apiKey={apiKey} onApiKeyChange={handleApiKeyChange} /> */} {/* REMOVED */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow">
         <aside className="lg:col-span-1 space-y-6">
@@ -122,7 +122,7 @@ export default function HomePage() {
           </div>
           <div className="md:col-span-1">
             <WeatherInfoComponent
-              apiKey={apiKey}
+              // apiKey={apiKey} // REMOVED
               coords={selectedCoords}
               activeDroneProfile={activeDroneProfile}
             />
