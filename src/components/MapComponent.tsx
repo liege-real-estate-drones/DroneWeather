@@ -2,7 +2,7 @@
 "use client";
 
 import { MapContainer, TileLayer, Circle, Marker, useMapEvents } from 'react-leaflet';
-import type { LatLngExpression, Map as LeafletMapType } from 'leaflet'; // Aliased import
+import type { LatLngExpression, Map as LeafletMapType } from 'leaflet';
 import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
@@ -27,29 +27,26 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-// Moved LocationMarker outside to be a standalone component
-function LocationMarker({
+function LocationMarkerInternal({
   onCoordsChange,
+  selectedCoords
 }: {
   onCoordsChange: (coords: Coordinates) => void;
+  selectedCoords: Coordinates | null;
 }) {
-  const map = useMapEvents({
+  useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-      // No flyTo here, MapContainer handles center changes declaratively
     },
   });
 
-  // Marker is now controlled by selectedCoords in the parent MapComponent
-  return null;
+  return selectedCoords ? <Marker position={[selectedCoords.lat, selectedCoords.lng]} /> : null;
 }
 
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
   const mapRef = useRef<LeafletMapType | null>(null);
-  
-  // Unique key for the map instance, changes on HMR if this module re-runs
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
 
   useEffect(() => {
@@ -59,7 +56,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   // Effect for cleaning up the map instance, tied to mapInstanceKey
   useEffect(() => {
     const mapInstanceToClean = mapRef.current; 
-    const effectKey = mapInstanceKey; // Capture the key associated with this map instance for logging
+    const effectKey = mapInstanceKey; 
 
     if (mapInstanceToClean) {
       const container = mapInstanceToClean.getContainer();
@@ -76,14 +73,14 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
           const leafletIdBeforeRemove = container?._leaflet_id;
           console.log(`[MapEffect ${effectKey}] Attempting to remove map. Container _leaflet_id BEFORE remove: ${leafletIdBeforeRemove}`);
           
-          mapInstanceToClean.remove(); // Leaflet's own cleanup
+          mapInstanceToClean.remove(); 
           
           const leafletIdAfterRemove = container?._leaflet_id;
           console.log(`[MapEffect ${effectKey}] Map remove() called. Container _leaflet_id AFTER remove: ${leafletIdAfterRemove}`);
 
           if (container && Object.prototype.hasOwnProperty.call(container, '_leaflet_id')) {
             console.warn(`[MapEffect ${effectKey}] _leaflet_id still present on container after remove(). Attempting manual deletion.`);
-            delete (container as any)._leaflet_id; // Manual deletion
+            delete (container as any)._leaflet_id; 
             const leafletIdAfterManualDelete = (container as any)._leaflet_id;
             console.log(`[MapEffect ${effectKey}] After manual delete, _leaflet_id is: ${leafletIdAfterManualDelete}`);
             if (leafletIdAfterManualDelete === undefined) {
@@ -106,7 +103,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
          console.log(`[MapEffect ${effectKey}] Cleanup: mapRef.current already changed or was null. Current mapRef: ${mapRef.current}, cleaned instance: ${mapInstanceToClean}.`);
       }
     };
-  }, [mapInstanceKey]); // This effect and its cleanup are tied to mapInstanceKey changes (HMR)
+  }, [mapInstanceKey]);
 
 
   const position: LatLngExpression = selectedCoords
@@ -125,39 +122,37 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   return (
     <div
-      // key removed from parent div
+      key={mapInstanceKey} // Key on the PARENT div
       className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden"
       data-ai-hint="interactive map"
     >
-      <MapContainer
-        key={mapInstanceKey} // Key on MapContainer itself to ensure React instance replacement
-        center={position}
-        zoom={zoom}
-        scrollWheelZoom={true}
-        style={{ height: '100%', width: '100%' }}
-        whenCreated={(mapInstance) => {
-          mapRef.current = mapInstance;
-          const container = mapInstance.getContainer();
-          console.log(`[MapEffect ${mapInstanceKey}] whenCreated - New map instance assigned to ref for key ${mapInstanceKey}. Container _leaflet_id: ${container?._leaflet_id}`);
-        }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        {selectedCoords && (
-          <>
+      {isClient && ( // Keep isClient check for initial render
+        <MapContainer
+          key={mapInstanceKey} // AND Key on MapContainer itself
+          center={position}
+          zoom={zoom}
+          scrollWheelZoom={true}
+          style={{ height: '100%', width: '100%' }}
+          whenCreated={(mapInstance) => {
+            mapRef.current = mapInstance;
+            const container = mapInstance.getContainer();
+            console.log(`[MapEffect ${mapInstanceKey}] whenCreated - New map instance assigned to ref for key ${mapInstanceKey}. Container _leaflet_id: ${container?._leaflet_id}`);
+          }}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          {selectedCoords && (
             <Circle
               center={[selectedCoords.lat, selectedCoords.lng]}
               radius={200}
               pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} 
             />
-            <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
-          </>
-        )}
-        <LocationMarker onCoordsChange={onCoordsChange} />
-      </MapContainer>
+          )}
+          <LocationMarkerInternal onCoordsChange={onCoordsChange} selectedCoords={selectedCoords} />
+        </MapContainer>
+      )}
     </div>
   );
 }
-
