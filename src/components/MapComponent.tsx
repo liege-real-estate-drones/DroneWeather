@@ -1,9 +1,9 @@
 
 "use client";
 
-import { MapContainer, TileLayer, Marker, useMapEvents, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer } from 'react-leaflet';
 import type { LatLngExpression } from 'leaflet';
-import L from 'leaflet'; // Standard Leaflet import
+import L from 'leaflet'; 
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
 import { useRef, useState, useEffect } from 'react';
@@ -12,8 +12,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 // Fix for default icon path issue with Webpack, made idempotent for HMR
 if (typeof window !== 'undefined') {
   const proto = L.Icon.Default.prototype as any;
-  // Check if the property exists before attempting to delete it.
-  // This makes the setup more robust if the module is re-executed by HMR.
   if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) {
     delete proto._getIconUrl;
   }
@@ -29,6 +27,7 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
+// LocationMarker and Circle are temporarily removed for HMR debugging.
 // interface LocationMarkerInnerProps {
 //   selectedCoords: Coordinates | null;
 //   onCoordsChange: (coords: Coordinates) => void;
@@ -38,12 +37,8 @@ interface MapComponentProps {
 //   const map = useMapEvents({
 //     click(e) {
 //       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-//       // Rely on MapContainer's center prop to update the map view when parent state changes.
 //     },
 //   });
-
-//   // The map's view (center/zoom) is controlled by MapContainer's props.
-//   // useEffect for flyTo was removed to avoid conflicts.
 
 //   return selectedCoords === null ? null : (
 //      <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
@@ -63,10 +58,8 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   const zoom = selectedCoords ? DEFAULT_MAP_ZOOM + 2 : DEFAULT_MAP_ZOOM;
 
-  // This key forces React to unmount and remount MapContainer on HMR if MapComponent.tsx changes.
-  // It remains stable during normal prop-driven re-renders.
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
-  const mapDomID = `leaflet-map-${mapInstanceKey}`; // Generate a unique DOM ID based on the instance key
+  const mapDomID = `leaflet-map-${mapInstanceKey}`; 
 
   if (!isClient) {
     return (
@@ -78,13 +71,13 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   return (
     <div
-      key={mapInstanceKey} // Add key to the parent div as well
+      key={mapInstanceKey} // This key on the parent div forces re-render of the whole div and its children on HMR
       className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden"
       data-ai-hint="interactive map"
     >
       <MapContainer
         id={mapDomID} // Assign the dynamic ID to the map container
-        key={mapInstanceKey} // Keep this key for React's unmount/remount
+        // key prop removed from here; parent div's key manages the instance lifecycle
         center={position}
         zoom={zoom}
         scrollWheelZoom={true}
@@ -95,11 +88,11 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         {/* 
-          The LocationMarker and Circle components have been temporarily commented out 
-          for debugging the HMR "Map container is already initialized" error.
+          The LocationMarker and Circle components are still temporarily commented out 
+          for diagnosing the HMR "Map container is already initialized" error.
           If HMR works without these, the issue lies within them or their interaction.
         */}
-        {/* <LocationMarker selectedCoords={selectedCoords} onCoordsChange={onCoordsChange} /> */}
+         {/* <LocationMarker selectedCoords={selectedCoords} onCoordsChange={onCoordsChange} /> */}
          {/* {selectedCoords && (
           <Circle
             center={[selectedCoords.lat, selectedCoords.lng]}
