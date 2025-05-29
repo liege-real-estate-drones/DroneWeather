@@ -9,10 +9,10 @@ import type { Coordinates } from '@/types';
 import { useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// Fix for default icon path issue with Webpack, made idempotent for HMR
+// Icon setup (idempotent for HMR)
 if (typeof window !== 'undefined') {
   const proto = L.Icon.Default.prototype as any;
-  if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) { // Check before deleting
+  if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) {
     delete proto._getIconUrl;
   }
   L.Icon.Default.mergeOptions({
@@ -27,30 +27,22 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-// Internal component for map interactions
-function LocationMarkerInternal({
-  onCoordsChange,
-  selectedCoords
-}: {
-  onCoordsChange: (coords: Coordinates) => void;
-  selectedCoords: Coordinates | null;
-}) {
+function LocationMarker({ onCoordsChange, selectedCoords }: { onCoordsChange: (coords: Coordinates) => void; selectedCoords: Coordinates | null; }) {
   useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
     },
   });
-
   return selectedCoords ? <Marker position={[selectedCoords.lat, selectedCoords.lng]} /> : null;
 }
 
-
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
-  const [renderMap, setRenderMap] = useState(false);
+  const [renderMap, setRenderMap] = useState(false); // State to control delayed rendering
   const mapRef = useRef<LeafletMapType | null>(null);
   // Unique key for the map instance, changes on HMR to force re-mount and proper cleanup
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
+  const mapDomID = `map-container-${mapInstanceKey}`; // Dynamic ID for the map DOM element
 
   useEffect(() => {
     setIsClient(true);
@@ -123,7 +115,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
          console.log(`[MapEffect ${effectKey}] Cleanup: mapRef.current (${mapRef.current}) already changed or was null. Cleaned instance was: ${mapInstanceToClean}.`);
       }
     };
-  }, [mapInstanceKey]); // This effect and its cleanup re-run if mapInstanceKey changes (i.e., on HMR)
+  }, [mapInstanceKey]); // This effect and its cleanup re-run if mapInstanceKey changes
 
 
   const position: LatLngExpression = selectedCoords
@@ -148,6 +140,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
     >
       {isClient && renderMap && ( 
         <MapContainer
+          id={mapDomID} // Ensure MapContainer gets a unique ID based on mapInstanceKey
           key={mapInstanceKey} // AND Key on MapContainer itself
           center={position}
           zoom={zoom}
@@ -170,9 +163,11 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
               pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} 
             />
           )}
-          <LocationMarkerInternal onCoordsChange={onCoordsChange} selectedCoords={selectedCoords} />
+          <LocationMarker onCoordsChange={onCoordsChange} selectedCoords={selectedCoords} />
         </MapContainer>
       )}
     </div>
   );
 }
+
+    
