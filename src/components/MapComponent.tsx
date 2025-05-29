@@ -38,16 +38,17 @@ function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerP
   const map = useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-      // Rely on MapContainer's center prop to update the map view.
+      // Rely on MapContainer's center prop to update the map view when parent state changes.
     },
   });
 
-  // Effect to move map when selectedCoords change from outside (e.g. initial load, search)
-  useEffect(() => {
-    if (selectedCoords && map) {
-      map.flyTo([selectedCoords.lat, selectedCoords.lng], map.getZoom());
-    }
-  }, [selectedCoords, map]);
+  // The map's view (center/zoom) is controlled by MapContainer's props.
+  // This useEffect for flyTo is removed to avoid potential conflicts.
+  // useEffect(() => {
+  //   if (selectedCoords && map) {
+  //     map.flyTo([selectedCoords.lat, selectedCoords.lng], map.getZoom());
+  //   }
+  // }, [selectedCoords, map]);
 
 
   return selectedCoords === null ? null : (
@@ -82,9 +83,9 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   }
 
   return (
-    <div 
+    <div
       key={mapInstanceKey} // Add key to the parent div as well
-      className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden" 
+      className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden"
       data-ai-hint="interactive map"
     >
       <MapContainer
