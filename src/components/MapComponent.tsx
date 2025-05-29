@@ -2,14 +2,14 @@
 "use client";
 
 import { MapContainer, TileLayer, Circle, Marker, useMapEvents } from 'react-leaflet';
-import type { LatLngExpression } from 'leaflet';
+import type { LatLngExpression, Map as LeafletMap } from 'leaflet'; // Import Map as LeafletMap
 import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
 import { useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// Icon setup (idempotent for HMR)
+// Icon setup for Leaflet (idempotent for HMR)
 if (typeof window !== 'undefined') {
   const proto = L.Icon.Default.prototype as any;
   if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) {
@@ -27,18 +27,17 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-function LocationMarkerInternal({ onCoordsChange }: { onCoordsChange: (coords: Coordinates) => void; }) {
+function LocationMarker({ onCoordsChange }: { onCoordsChange: (coords: Coordinates) => void; }) {
   useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
     },
   });
-  return null; // This component does not render anything itself
+  return null;
 }
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
-  const [renderMap, setRenderMap] = useState(false);
   
   // This key changes every time MapComponent.tsx is hot-reloaded, forcing React to treat
   // the keyed components as new instances, triggering unmount/mount cycles.
@@ -48,22 +47,6 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   useEffect(() => {
     setIsClient(true);
   }, []);
-
-  useEffect(() => {
-    let timerId: NodeJS.Timeout | undefined;
-    if (isClient) {
-      // Ensure previous map is unmounted before rendering a new one by toggling renderMap
-      setRenderMap(false); 
-      timerId = setTimeout(() => {
-        setRenderMap(true);
-      }, 50); // Small delay to allow potential cleanup
-    }
-    return () => {
-      if (timerId) {
-        clearTimeout(timerId);
-      }
-    };
-  }, [isClient, mapInstanceKey]); // Re-run if mapInstanceKey changes (HMR) or on initial client mount
 
   const position: LatLngExpression = selectedCoords
     ? [selectedCoords.lat, selectedCoords.lng]
@@ -85,7 +68,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
       className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden"
       data-ai-hint="interactive map"
     >
-      {isClient && renderMap && ( 
+      {isClient && ( 
         <MapContainer
           id={mapDomID} // Assign the dynamic ID to the map container
           key={mapInstanceKey} // Key on MapContainer itself ensures this specific component instance is replaced
@@ -103,12 +86,12 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
               <Circle
                 center={[selectedCoords.lat, selectedCoords.lng]}
                 radius={200} // meters
-                pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} // Accent color
+                pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }} // Accent color (direct hex)
               />
               <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
             </>
           )}
-          <LocationMarkerInternal onCoordsChange={onCoordsChange} />
+          <LocationMarker onCoordsChange={onCoordsChange} />
         </MapContainer>
       )}
     </div>
