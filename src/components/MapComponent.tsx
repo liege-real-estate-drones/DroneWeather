@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 // Fix for default icon path issue with Webpack, made idempotent for HMR
 if (typeof window !== 'undefined') {
   const proto = L.Icon.Default.prototype as any;
-  if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) {
+  if (Object.prototype.hasOwnProperty.call(proto, '_getIconUrl')) { // Check if property exists before deleting
     delete proto._getIconUrl;
   }
   L.Icon.Default.mergeOptions({
@@ -27,30 +27,23 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-// LocationMarker and Circle are temporarily removed for HMR debugging.
-// interface LocationMarkerInnerProps {
-//   selectedCoords: Coordinates | null;
-//   onCoordsChange: (coords: Coordinates) => void;
-// }
-
-// function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerProps) {
-//   const map = useMapEvents({
-//     click(e) {
-//       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-//     },
-//   });
-
-//   return selectedCoords === null ? null : (
-//      <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
-//   );
-// }
-
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
+  const [canRenderMap, setCanRenderMap] = useState(false); // New state for delayed rendering
 
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  useEffect(() => {
+    if (isClient) {
+      // Defer map rendering to the next event loop tick
+      const timer = setTimeout(() => {
+        setCanRenderMap(true);
+      }, 0); 
+      return () => clearTimeout(timer);
+    }
+  }, [isClient]);
 
   const position: LatLngExpression = selectedCoords
     ? [selectedCoords.lat, selectedCoords.lng]
@@ -61,7 +54,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
   const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
   const mapDomID = `leaflet-map-${mapInstanceKey}`; 
 
-  if (!isClient) {
+  if (!isClient || !canRenderMap) { // Check canRenderMap before rendering
     return (
       <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden flex items-center justify-center" data-ai-hint="interactive map loading">
         <Skeleton className="h-full w-full rounded-lg" />
