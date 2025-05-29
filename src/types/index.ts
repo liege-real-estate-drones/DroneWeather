@@ -1,15 +1,20 @@
-export interface Coordinates {
-  lat: number;
-  lng: number;
+// src/types/index.ts
+
+// ... (vos autres types existants)
+
+export interface MeteosourceErrorDetailItem {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
 }
 
-export interface DroneProfile {
-  name: string;
-  maxWindSpeed: number; // m/s
-  minTemp: number; // °C
-  maxTemp: number; // °C
+export interface MeteosourceErrorResponse {
+  error?: string; // Message d'erreur principal
+  message?: string; // Parfois utilisé à la place de 'error'
+  detail?: string | MeteosourceErrorDetailItem[]; // Peut être une chaîne ou un tableau de détails d'erreur
 }
 
+// Assurez-vous que MeteosourceResponse est bien défini
 export interface MeteosourceCurrentData {
   summary: string;
   icon_num: number;
@@ -31,11 +36,11 @@ export interface MeteosourceCurrentData {
     middle?: number;
     high?: number;
   };
-  visibility?: { // Optional as per API docs, might not always be present
+  visibility?: {
     total: number; // km
   };
   dew_point?: number; // °C
-  pressure?: { // Optional
+  pressure?: {
     msl: number; // hPa
   };
 }
@@ -56,6 +61,22 @@ export interface MeteosourceResponse {
   units: string;
   current: MeteosourceCurrentData | null;
   hourly: MeteosourceHourlyData | null;
+  // Potentiellement, ajoutez ici les champs d'erreur si l'API peut retourner
+  // des erreurs même avec un statut 200 pour certains plans/cas.
+  // Cependant, les erreurs 4xx/5xx sont généralement gérées par la non-ok response.
+}
+
+// ... (vos autres types existants comme Coordinates, DroneProfile, SafetyAssessment)
+export interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
+export interface DroneProfile {
+  name: string;
+  maxWindSpeed: number; // m/s
+  minTemp: number; // °C
+  maxTemp: number; // °C
 }
 
 export interface SafetyAssessment {

@@ -13,74 +13,73 @@ import { AlertTriangle, CloudOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface WeatherInfoComponentProps {
-  // apiKey: string | null; // REMOVED
   coords: Coordinates | null;
   activeDroneProfile: DroneProfile;
 }
 
-// MODIFIED fetchWeather function
 async function fetchWeather(coords: Coordinates): Promise<MeteosourceResponse> {
   const { lat, lng } = coords;
-  // Note: URL is now relative to your own application
   const response = await fetch(
+    // Utilisation d'une URL relative pour appeler votre propre route API
     `/api/weather?lat=${lat}&lon=${lng}`
   );
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch weather data from your API route.' }));
-    // You might want to customize error messages based on status codes from your API route
-    if (response.status === 500 && errorData.error?.includes('API key is not configured')) {
-        throw new Error('The weather service is not configured on the server. Please contact the administrator.');
-    }
-    throw new Error(errorData.error || errorData.message || `API route error! status: ${response.status}`);
+    // Tenter de lire le corps de l'erreur comme JSON
+    const errorData = await response.json().catch(() => ({ 
+      // Fallback si le corps n'est pas JSON ou si l'analyse échoue
+      error: `Erreur API (${response.status}). Impossible d'analyser les détails de l'erreur.` 
+    }));
+    // Utiliser le message d'erreur du backend s'il existe, sinon un message générique
+    throw new Error(errorData.error || `Erreur API (${response.status}) lors de la récupération des données météo depuis votre route API.`);
   }
   return response.json();
 }
 
-export default function WeatherInfoComponent({ /* apiKey, */ coords, activeDroneProfile }: WeatherInfoComponentProps) { // Remove apiKey from props
+export default function WeatherInfoComponent({ coords, activeDroneProfile }: WeatherInfoComponentProps) {
   const { toast } = useToast();
   const [safetyAssessment, setSafetyAssessment] = useState<SafetyAssessment | null>(null);
   const [isAssessingSafety, setIsAssessingSafety] = useState(false);
 
-  // MODIFIED queryKey
-  const queryKey = useMemo(() => ['weather', coords], [coords]); // apiKey removed
+  const queryKey = useMemo(() => ['weather', coords], [coords]);
 
-  const { data: weatherData, isLoading, error, isFetching } = useQuery<MeteosourceResponse, Error>({
+  const { data: weatherData, isLoading, error, isFetching, isError } = useQuery<MeteosourceResponse, Error>({
     queryKey: queryKey,
     queryFn: () => {
-      // if (!apiKey) throw new Error('API key is missing.'); // REMOVE THIS LINE
-      if (!coords) throw new Error('Coordinates are missing.');
-      return fetchWeather(coords); // apiKey no longer passed
+      if (!coords) throw new Error('Les coordonnées sont manquantes.');
+      return fetchWeather(coords);
     },
-    enabled: !!coords, // apiKey no longer a condition
+    enabled: !!coords,
     staleTime: 1000 * 60 * 15, // 15 minutes
     gcTime: 1000 * 60 * 30, // 30 minutes
-    retry: (failureCount, error) => {
-      // Don't retry for auth errors or rate limit - API key errors are now server-side or generic client-side.
-      // Consider if specific client-side error messages warrant no retries.
-      // For example, if the error is "The weather service is not configured on the server...", retrying won't help.
-      if (error.message.includes('weather service is not configured')) {
+    retry: (failureCount, errorInstance) => {
+      // Ne pas réessayer pour les erreurs de configuration serveur ou les erreurs de validation des paramètres (souvent 422)
+      if (errorInstance.message.includes('service météo n\'est pas configuré') ||
+          errorInstance.message.includes('Erreur Meteosource :') || // Indique une erreur relayée par notre backend
+          errorInstance.message.includes('Coordonnées invalides') ||
+          errorInstance.message.includes('paramètre invalide')) { // Message générique pour erreurs de validation
         return false;
       }
-      return failureCount < 2; // Retry twice for other errors
+      // Limiter les nouvelles tentatives pour d'autres types d'erreurs
+      return failureCount < 2;
     },
     refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
-    if (error) {
+    if (isError && error) { // S'assurer que error n'est pas null quand isError est true
       toast({
-        title: "Weather Fetch Error",
-        description: error.message,
+        title: "Erreur de récupération météo",
+        description: error.message, // Ce message devrait maintenant être plus détaillé grâce à la route API
         variant: "destructive",
       });
     }
-  }, [error, toast]);
+  }, [isError, error, toast]);
 
   useEffect(() => {
     if (weatherData?.current && activeDroneProfile) {
       const performAssessment = async () => {
         setIsAssessingSafety(true);
-        setSafetyAssessment(null); // Clear previous assessment
+        setSafetyAssessment(null); 
         try {
           const assessmentInput = {
             temperature: weatherData.current!.temp,
@@ -93,17 +92,17 @@ export default function WeatherInfoComponent({ /* apiKey, */ coords, activeDrone
           };
           const assessmentResult = await assessDroneSafety(assessmentInput);
           setSafetyAssessment(assessmentResult);
-        } catch (e) {
-          console.error("Safety assessment failed:", e);
+        } catch (e: any) {
+          console.error("L'évaluation de la sécurité a échoué:", e);
           toast({
-            title: "Safety Assessment Error",
-            description: "Could not assess drone safety at this time.",
+            title: "Erreur d'évaluation de la sécurité",
+            description: e.message || "Impossible d'évaluer la sécurité du drone pour le moment.",
             variant: "destructive",
           });
-          setSafetyAssessment({ // Fallback error state for safety indicator
+          setSafetyAssessment({ 
             safeToFly: false,
             indicatorColor: 'RED',
-            message: 'Error assessing safety. Conditions might be unsuitable.'
+            message: 'Erreur lors de l\'évaluation de la sécurité. Les conditions pourraient être inadaptées.'
           });
         } finally {
           setIsAssessingSafety(false);
@@ -111,27 +110,16 @@ export default function WeatherInfoComponent({ /* apiKey, */ coords, activeDrone
       };
       performAssessment();
     } else {
-      setSafetyAssessment(null); // Clear assessment if no data or profile
+      setSafetyAssessment(null); 
     }
   }, [weatherData, activeDroneProfile, toast]);
-
-  // REMOVED API KEY CHECK BLOCK
-  // if (!apiKey) {
-  //   return (
-  //     <Alert variant="default" className="mt-6 shadow-md">
-  //       <AlertTriangle className="h-5 w-5" />
-  //       <AlertTitle>API Key Required</AlertTitle>
-  //       <AlertDescription>Please enter your Meteosource API key to view weather information.</AlertDescription>
-  //     </Alert>
-  //   );
-  // }
 
   if (!coords) {
     return (
       <Alert variant="default" className="mt-6 shadow-md">
         <CloudOff className="h-5 w-5" />
-        <AlertTitle>Select Location</AlertTitle>
-        <AlertDescription>Click on the map to select a location and view weather data.</AlertDescription>
+        <AlertTitle>Sélectionner un lieu</AlertTitle>
+        <AlertDescription>Cliquez sur la carte pour sélectionner un lieu et afficher les données météo.</AlertDescription>
       </Alert>
     );
   }
@@ -148,31 +136,35 @@ export default function WeatherInfoComponent({ /* apiKey, */ coords, activeDrone
     );
   }
 
-  if (error) {
-     // Error toast is already handled by useEffect, this is a fallback UI message.
+  if (isError && error) { // Afficher l'alerte d'erreur si react-query est en état d'erreur
     return (
       <Alert variant="destructive" className="mt-6 shadow-md">
         <AlertTriangle className="h-5 w-5" />
-        <AlertTitle>Error Fetching Weather</AlertTitle>
+        <AlertTitle>Erreur lors de la récupération de la météo</AlertTitle>
         <AlertDescription>{error.message}</AlertDescription>
       </Alert>
     );
   }
 
   if (!weatherData || !weatherData.current) {
+     // Ce cas peut se produire si la requête réussit (pas d'erreur réseau/serveur) mais que Meteosource ne renvoie pas de données `current`
+     // ou si weatherData est null après le chargement initial sans erreur explicite.
     return (
       <Alert variant="default" className="mt-6 shadow-md">
         <CloudOff className="h-5 w-5" />
-        <AlertTitle>No Weather Data</AlertTitle>
-        <AlertDescription>Could not retrieve weather data for the selected location. Please try again or select a different location.</AlertDescription>
+        <AlertTitle>Aucune donnée météo</AlertTitle>
+        <AlertDescription>Impossible de récupérer les données météo pour le lieu sélectionné. Veuillez réessayer ou sélectionner un autre lieu.</AlertDescription>
       </Alert>
     );
   }
   
-
   return (
     <div className="space-y-6 mt-6 md:mt-0">
-      <SafetyIndicator assessment={safetyAssessment} />
+      {isAssessingSafety && !safetyAssessment ? (
+        <Skeleton className="h-24 w-full rounded-lg" />
+      ) : (
+        <SafetyIndicator assessment={safetyAssessment} />
+      )}
       {weatherData.current && <CurrentWeather data={weatherData.current} />}
       {weatherData.hourly?.data && <HourlyForecastList data={weatherData.hourly.data} />}
     </div>
