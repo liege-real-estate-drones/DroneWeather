@@ -6,6 +6,7 @@ import type { LatLngExpression } from 'leaflet';
 import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
+import { useRef } from 'react'; // Import useRef
 
 // Fix for default icon path issue with Webpack
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -20,7 +21,13 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-function LocationMarker({ selectedCoords, onCoordsChange }: MapComponentProps) {
+// Renamed to avoid conflict and clarify props
+interface LocationMarkerInnerProps {
+  selectedCoords: Coordinates | null;
+  onCoordsChange: (coords: Coordinates) => void;
+}
+
+function LocationMarker({ selectedCoords, onCoordsChange }: LocationMarkerInnerProps) {
   const map = useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
@@ -41,15 +48,18 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
 
   const zoom = selectedCoords ? DEFAULT_MAP_ZOOM + 2 : DEFAULT_MAP_ZOOM;
 
+  // Generate a key that is stable across re-renders of this component instance,
+  // but changes if the MapComponent module itself is re-evaluated (e.g., by HMR).
+  const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
+
   return (
     <div className="h-[400px] md:h-full w-full rounded-lg shadow-lg overflow-hidden" data-ai-hint="interactive map">
       <MapContainer
+        key={mapInstanceKey} // Add key here
         center={position}
         zoom={zoom}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
-        // No whenCreated, mapRef, or manual lifecycle useEffects needed here now.
-        // MapContainer will update its view based on changes to `center` and `zoom` props.
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -67,3 +77,4 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
     </div>
   );
 }
+
