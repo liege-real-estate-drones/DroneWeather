@@ -1,14 +1,13 @@
 
 "use client";
 
-import { MapContainer, TileLayer } from 'react-leaflet';
-import type { LatLngExpression } from 'leaflet';
+import { MapContainer, TileLayer, Circle, Marker, useMapEvents } from 'react-leaflet';
+import type { LatLngExpression, Map as LeafletMapType } from 'leaflet'; // Aliased import
 import L from 'leaflet';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
 import { useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-// import { Circle, Marker, useMapEvents } from 'react-leaflet'; // Temporarily commented out
 
 // Fix for default icon path issue with Webpack, made idempotent for HMR
 if (typeof window !== 'undefined') {
@@ -19,7 +18,7 @@ if (typeof window !== 'undefined') {
   L.Icon.Default.mergeOptions({
     iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
     iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png', // Corrected typo here
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   });
 }
 
@@ -28,47 +27,57 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-// Temporarily commented out LocationMarker
-/*
-function LocationMarker({
-  selectedCoords,
+// Define LocationMarkerComponent outside MapComponent for clarity
+function LocationMarkerComponent({
+  currentSelectedCoords,
   onCoordsChange,
 }: {
-  selectedCoords: Coordinates | null;
+  currentSelectedCoords: Coordinates | null;
   onCoordsChange: (coords: Coordinates) => void;
 }) {
-  const map = useMapEvents({
+  useMapEvents({
     click(e) {
       onCoordsChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-      // Removed map.flyTo from here as MapContainer center prop should handle it
+      // No flyTo here, MapContainer center prop handles view changes based on selectedCoords
     },
   });
 
-  // useEffect to handle map flying to new selectedCoords was removed
-  // Marker rendering based on selectedCoords
-  return selectedCoords === null ? null : (
-    <Marker position={[selectedCoords.lat, selectedCoords.lng]} />
+  return currentSelectedCoords === null ? null : (
+    <Marker position={[currentSelectedCoords.lat, currentSelectedCoords.lng]} />
   );
 }
-*/
+
 
 export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false);
+  const mapRef = useRef<LeafletMapType | null>(null); // To store the Leaflet map instance
+
+  // This key changes on HMR, forcing React to unmount/remount the keyed components.
+  const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
+  // This ID also changes on HMR, giving Leaflet a new DOM ID for its container.
+  const mapDomID = `leaflet-map-${mapInstanceKey}`;
 
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Effect to manually remove the map instance on unmount or when mapInstanceKey changes (HMR)
+  useEffect(() => {
+    // The cleanup function is called when the component unmounts
+    // or BEFORE this effect re-runs if mapInstanceKey changes.
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [mapInstanceKey]); // Depend on mapInstanceKey to trigger cleanup on HMR
 
   const position: LatLngExpression = selectedCoords
     ? [selectedCoords.lat, selectedCoords.lng]
     : [BELGIUM_CENTER.lat, BELGIUM_CENTER.lng];
 
   const zoom = selectedCoords ? DEFAULT_MAP_ZOOM + 2 : DEFAULT_MAP_ZOOM;
-
-  // This key changes on HMR, forcing React to unmount/remount the keyed components.
-  const mapInstanceKey = useRef(Symbol('mapInstanceKey').toString()).current;
-  // This ID also changes on HMR, giving Leaflet a new DOM ID for its container.
-  const mapDomID = `leaflet-map-${mapInstanceKey}`;
 
   if (!isClient) {
     return (
@@ -91,16 +100,23 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         zoom={zoom}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
+        whenCreated={(mapInstance) => { // Callback to get the map instance
+          mapRef.current = mapInstance;
+        }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {/*
-          LocationMarker and Circle are still temporarily commented out
-          {selectedCoords && <Circle center={[selectedCoords.lat, selectedCoords.lng]} radius={200} />}
-          <LocationMarker selectedCoords={selectedCoords} onCoordsChange={onCoordsChange} />
-        */}
+        {selectedCoords && (
+          <Circle
+            center={[selectedCoords.lat, selectedCoords.lng]}
+            radius={200}
+            // Accent color from theme: #FFB866 (Yellow-Orange)
+            pathOptions={{ color: '#FFB866', fillColor: '#FFB866', fillOpacity: 0.3 }}
+          />
+        )}
+        <LocationMarkerComponent currentSelectedCoords={selectedCoords} onCoordsChange={onCoordsChange} />
       </MapContainer>
     </div>
   );
