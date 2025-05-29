@@ -14,7 +14,8 @@ interface HourlyWeatherCardProps {
 const getWeatherIconUrl = (iconCode: string | number | undefined | null, summary?: string): string => {
   let hint = "weather"; // Default hint
   if (iconCode === null || typeof iconCode === 'undefined') {
-    return `https://placehold.co/48x48.png?text=?&bg=A0C4E2&fg=FFFFFF`;
+    // Using a placeholder that clearly indicates data is missing, with a neutral background
+    return `https://placehold.co/48x48.png?text=?&bg=e0e0e0&fg=757575`;
   }
 
   if (typeof iconCode === 'string') { // OpenWeatherMap icon code
@@ -31,7 +32,8 @@ const getWeatherIconUrl = (iconCode: string | number | undefined | null, summary
   else if (iconCode >= 80 && iconCode <= 86) hint = "rain snow showers";
   else if (iconCode >= 95 && iconCode <= 99) hint = "storm";
   
-  return `https://placehold.co/48x48.png?text=WMO:${iconCode}&bg=A0C4E2&fg=FFFFFF`; 
+  // Using a placeholder that shows the WMO code, with a neutral background
+  return `https://placehold.co/48x48.png?text=WMO:${iconCode}&bg=e0e0e0&fg=757575`;
 };
 
 export default function HourlyWeatherCard({ data }: HourlyWeatherCardProps) {
@@ -44,13 +46,8 @@ export default function HourlyWeatherCard({ data }: HourlyWeatherCardProps) {
   const visibilityInKm = typeof data.visibility?.total === 'number' ? data.visibility.total / 1000 : null;
 
   const windSpeedDisplay = displayValue(data.wind?.speed, "m/s");
-  let gustValueForDisplay: number | null = null;
-  if (typeof data.wind?.gust === 'number') {
-    gustValueForDisplay = data.wind.gust;
-  } else if (typeof data.wind?.speed === 'number') { // Fallback if gust is null/undefined but speed is available
-    gustValueForDisplay = data.wind.speed;
-  }
-  const windGustDisplay = displayValue(gustValueForDisplay, "m/s");
+  // For display, only show gust if it's a number. Otherwise, displayValue will render it as "N/A".
+  const windGustDisplay = displayValue(data.wind?.gust, "m/s");
 
 
   return (
