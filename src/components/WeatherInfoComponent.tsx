@@ -75,20 +75,20 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
         setIsAssessingSafety(true);
         setSafetyAssessment(null); 
 
-        const currentData = weatherData.current as UnifiedCurrentWeatherData; // Assert type for easier access
+        const currentData = weatherData.current as UnifiedCurrentWeatherData;
         
         const tempIsValid = typeof currentData.temp === 'number';
         const windSpeedIsValid = typeof currentData.wind?.speed === 'number';
-        const windGustIsValid = typeof currentData.wind?.gust === 'number';
+        // We will derive windGustForAI, so we only need windSpeedIsValid for this part.
         const cloudCoverIsValid = typeof currentData.cloud_cover?.total === 'number';
         const visibilityIsValid = typeof currentData.visibility?.total === 'number';
         // cloudBaseHeight is optional for AI
 
-        if (!tempIsValid || !windSpeedIsValid || !windGustIsValid || !cloudCoverIsValid || !visibilityIsValid) {
+        if (!tempIsValid || !windSpeedIsValid || !cloudCoverIsValid || !visibilityIsValid) {
           let missingFields: string[] = [];
           if (!tempIsValid) missingFields.push("température actuelle");
           if (!windSpeedIsValid) missingFields.push("vitesse du vent actuelle");
-          if (!windGustIsValid) missingFields.push("rafales de vent actuelles");
+          // We handle windGust derivation below, so it won't be "missing" if speed is present.
           if (!cloudCoverIsValid) missingFields.push("couverture nuageuse");
           if (!visibilityIsValid) missingFields.push("visibilité");
           
@@ -109,20 +109,26 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
           return; 
         }
 
+        // All required fields (temp, windSpeed, cloudCover, visibility) are asserted to be numbers here due to the check above.
+        // Derive windGustForAI: use actual gust if available, otherwise use wind speed.
+        const windGustForAI = typeof currentData.wind?.gust === 'number' 
+          ? currentData.wind.gust 
+          : currentData.wind!.speed; // We know wind.speed is a number here.
+
         try {
-          // All required fields are asserted to be numbers here due to the check above
           const assessmentInput = {
             temperature: currentData.temp as number, 
-            windSpeed: currentData.wind?.speed as number,
-            windGust: currentData.wind?.gust as number,
+            windSpeed: currentData.wind!.speed as number, // Asserting non-null due to windSpeedIsValid check
+            windGust: windGustForAI as number, // Ensured to be a number
             precipitationType: currentData.precipitation?.type || "none",
             maxWindSpeed: activeDroneProfile.maxWindSpeed,
             minTemperature: activeDroneProfile.minTemp,
             maxTemperature: activeDroneProfile.maxTemp,
-            cloudCover: currentData.cloud_cover?.total as number,
-            visibility: currentData.visibility?.total as number, // in meters
-            cloudBaseHeight: currentData.cloud_base_height ?? null, // can be null
+            cloudCover: currentData.cloud_cover!.total as number, // Asserting non-null due to cloudCoverIsValid check
+            visibility: currentData.visibility!.total as number, // Asserting non-null due to visibilityIsValid check
+            cloudBaseHeight: currentData.cloud_base_height ?? null, 
           };
+
           const assessmentResult = await assessDroneSafety(assessmentInput);
           setSafetyAssessment(assessmentResult);
         } catch (e: any) {
@@ -143,7 +149,6 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
       };
       performAssessment();
     } else {
-      // Reset assessment if no weather data or profile
       setSafetyAssessment(null); 
       if(weatherData && !weatherData.current){
         console.warn("Weather data fetched, but current weather details are missing.");
@@ -155,7 +160,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weatherData, activeDroneProfile]); // Removed toast from dependencies to avoid loops if toast causes re-renders
+  }, [weatherData, activeDroneProfile]); 
 
   if (!coords) {
     return (
@@ -172,9 +177,9 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
   if (showLoadingSkeleton) {
     return (
       <div className="space-y-6 mt-6 md:mt-0">
-        <Skeleton className="h-24 w-full rounded-lg" /> {/* SafetyIndicator placeholder */}
-        <Skeleton className="h-64 w-full rounded-lg" /> {/* CurrentWeather placeholder */}
-        <Skeleton className="h-48 w-full rounded-lg" /> {/* HourlyForecast placeholder */}
+        <Skeleton className="h-24 w-full rounded-lg" /> 
+        <Skeleton className="h-64 w-full rounded-lg" /> 
+        <Skeleton className="h-48 w-full rounded-lg" /> 
       </div>
     );
   }
@@ -193,13 +198,18 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
   }
 
   if (!weatherData || !weatherData.current) {
+    // This case also covers when API returns data but current is null.
+    let description = "Aucune donnée météo actuelle n'a été trouvée pour le lieu sélectionné ou les données sont incomplètes.";
+    if (isError && error?.message) { // If there was a fetch error leading to no data
+      description = error.message;
+    } else if (weatherData && !weatherData.current) {
+      description = "Les données météo actuelles pour ce lieu sont manquantes dans la réponse du service.";
+    }
     return (
-      <Alert variant="default" className="mt-6 shadow-md">
-        <CloudOff className="h-5 w-5" />
-        <AlertTitle>Aucune donnée météo actuelle</AlertTitle>
-        <AlertDescription>
-          Aucune donnée météo actuelle n'a été trouvée pour le lieu sélectionné ou les données sont incomplètes.
-        </AlertDescription>
+      <Alert variant="destructive" className="mt-6 shadow-md">
+         <AlertTriangle className="h-5 w-5" />
+        <AlertTitle>Données météo non disponibles</AlertTitle>
+        <AlertDescription>{description}</AlertDescription>
       </Alert>
     );
   }
@@ -216,3 +226,4 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     </div>
   );
 }
+
