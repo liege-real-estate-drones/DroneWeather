@@ -26,7 +26,7 @@ function MapCircleOverlay({
   fillOpacity,
 }: MapCircleOverlayProps) {
   const map = useMap();
-  const mapsLib = useMapsLibrary('maps'); // Correctly load 'maps' library
+  const mapsLib = useMapsLibrary('maps');
   const [circle, setCircle] = useState<google.maps.Circle | null>(null);
 
   useEffect(() => {
@@ -48,7 +48,6 @@ function MapCircleOverlay({
       });
       setCircle(newCircle);
     } else {
-      // Update existing circle
       circle.setOptions({
         center,
         radius,
@@ -60,8 +59,6 @@ function MapCircleOverlay({
       });
     }
 
-    // Cleanup function to remove the circle when the component unmounts
-    // or when dependencies that would nullify it change (e.g., map becomes null)
     return () => {
       if (circle) {
         circle.setMap(null);
@@ -69,7 +66,6 @@ function MapCircleOverlay({
     };
   }, [map, mapsLib, circle, center, radius, strokeColor, strokeOpacity, strokeWeight, fillColor, fillOpacity]);
 
-  // This component doesn't render any JSX itself, it manipulates the map imperatively.
   return null;
 }
 
@@ -97,13 +93,14 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         zoom={zoom}
         style={{ width: '100%', height: '100%' }}
         gestureHandling={'greedy'}
-        disableDefaultUI={false} // Enables default UI including zoom controls
-        mapTypeControl={true}    // Enable map type control (Satellite/Map)
-        streetViewControl={true} // Enable Street View Pegman
-        fullscreenControl={true} // Enable fullscreen button
-        clickableIcons={false}   // Keep this false to avoid POI popups
-        mapId="droneWeatherMapStyle" // Optional: for custom map styling
-        renderingType="RASTER"   // Explicitly set renderingType
+        disableDefaultUI={false}
+        mapTypeControl={true}
+        streetViewControl={true}
+        fullscreenControl={true}
+        zoomControl={true} // Explicitly enable zoom control
+        clickableIcons={false}
+        mapId="droneWeatherMapStyle"
+        renderingType="RASTER"
         onClick={(e: MapMouseEvent) => {
           if (e.detail?.latLng) {
             onCoordsChange({ lat: e.detail.latLng.lat, lng: e.detail.latLng.lng });
@@ -118,11 +115,11 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
             />
             <MapCircleOverlay
               center={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
-              radius={200} // in meters
-              strokeColor={'hsl(var(--accent))'} // Using HSL variable from CSS for accent
+              radius={200} 
+              strokeColor={'hsl(var(--accent))'}
               strokeOpacity={0.8}
               strokeWeight={2}
-              fillColor={'hsl(var(--accent))'} // Using HSL variable from CSS for accent
+              fillColor={'hsl(var(--accent))'}
               fillOpacity={0.35}
             />
           </>

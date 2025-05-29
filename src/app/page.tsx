@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -5,14 +6,14 @@ import dynamic from 'next/dynamic';
 import WeatherInfoComponent from '@/components/WeatherInfoComponent';
 import DroneProfileSelector from '@/components/DroneProfileSelector';
 import CustomDroneParamsForm from '@/components/CustomDroneParamsForm';
-import { DEFAULT_DRONE_PROFILES, DJI_MINI_4_PRO_PROFILE, DRONE_MODELS, BELGIUM_CENTER } from '@/lib/constants'; // Ajout de BELGIUM_CENTER
+import { DEFAULT_DRONE_PROFILES, DJI_MINI_4_PRO_PROFILE, DRONE_MODELS, BELGIUM_CENTER } from '@/lib/constants';
 import type { Coordinates, DroneProfile } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { PlaneTakeoff, MapPinOff } from 'lucide-react'; // Ajout de MapPinOff
+import { PlaneTakeoff, MapPinOff } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
-import { APIProvider } from '@vis.gl/react-google-maps'; // IMPORTATION AJOUTÉE
+import { APIProvider } from '@vis.gl/react-google-maps';
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -20,22 +21,16 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 });
 
 export default function HomePage() {
-  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null); // Initialisation à null
+  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
   const [selectedDroneModel, setSelectedDroneModel] = useState<string>(DRONE_MODELS.MINI_4_PRO);
   const [customDroneParams, setCustomDroneParams] = useState<Omit<DroneProfile, 'name'>>(DJI_MINI_4_PRO_PROFILE);
   const [isClient, setIsClient] = useState(false);
   const { toast } = useToast();
 
-  // Récupération de la clé API Google Maps depuis les variables d'environnement
   const googleMapsApiKey = process.env.NEXT_PUBLIC_Maps_API_KEY;
 
   useEffect(() => {
     setIsClient(true);
-    // Initialiser les coordonnées au centre de la Belgique si aucune n'est sélectionnée
-    // Cela peut être utile pour avoir un point de départ dès le chargement
-    // if (!selectedCoords) {
-    // setSelectedCoords(BELGIUM_CENTER);
-    // }
   }, []);
 
 
@@ -127,7 +122,7 @@ export default function HomePage() {
           </aside>
 
           <main className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="md:col-span-1 h-[400px] md:h-auto">
+            <div className="md:col-span-1 h-[400px] md:h-full"> {/* Changed md:h-auto to md:h-full */}
               <MapComponent selectedCoords={selectedCoords} onCoordsChange={handleCoordsChange} />
             </div>
             <div className="md:col-span-1">
@@ -140,7 +135,7 @@ export default function HomePage() {
         </div>
         <footer className="text-center mt-8 py-4 border-t">
           <p className="text-sm text-muted-foreground">
-            Propulsé par <a href="https://www.meteosource.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Meteosource</a> et Google AI. Carte par Google Maps.
+            Propulsé par Open-Meteo, OpenWeatherMap et Google AI. Carte par Google Maps. {/* Updated attribution */}
           </p>
         </footer>
         <Toaster />

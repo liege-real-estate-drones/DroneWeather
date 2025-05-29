@@ -7,6 +7,7 @@ import type { Coordinates, DroneProfile, UnifiedWeatherResponse, SafetyAssessmen
 import { assessDroneSafety } from '@/ai/flows/assess-drone-safety';
 import CurrentWeather from './CurrentWeather';
 import HourlyForecastList from './HourlyForecastList';
+import DailyForecastList from '@/components/DailyForecastList'; // Import DailyForecastList using alias
 import SafetyIndicator from './SafetyIndicator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -46,8 +47,8 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
       return fetchWeather(coords);
     },
     enabled: !!coords,
-    staleTime: 1000 * 60 * 15, // 15 minutes
-    gcTime: 1000 * 60 * 30, // 30 minutes
+    staleTime: 1000 * 60 * 15, 
+    gcTime: 1000 * 60 * 30, 
     retry: (failureCount, errorInstance) => {
       if (errorInstance.message.includes('Service météo principal indisponible') ||
           errorInstance.message.includes('Coordonnées invalides') ||
@@ -77,23 +78,30 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
 
         const currentData = weatherData.current as UnifiedCurrentWeatherData;
         
+        let missingFields: string[] = [];
         const tempIsValid = typeof currentData.temp === 'number';
         const windSpeedIsValid = typeof currentData.wind?.speed === 'number';
-        // We will derive windGustForAI, so we only need windSpeedIsValid for this part.
         const cloudCoverIsValid = typeof currentData.cloud_cover?.total === 'number';
         const visibilityIsValid = typeof currentData.visibility?.total === 'number';
-        // cloudBaseHeight is optional for AI
 
-        if (!tempIsValid || !windSpeedIsValid || !cloudCoverIsValid || !visibilityIsValid) {
-          let missingFields: string[] = [];
-          if (!tempIsValid) missingFields.push("température actuelle");
-          if (!windSpeedIsValid) missingFields.push("vitesse du vent actuelle");
-          // We handle windGust derivation below, so it won't be "missing" if speed is present.
-          if (!cloudCoverIsValid) missingFields.push("couverture nuageuse");
-          if (!visibilityIsValid) missingFields.push("visibilité");
-          
+        if (!tempIsValid) missingFields.push("température actuelle");
+        if (!windSpeedIsValid) missingFields.push("vitesse du vent actuelle");
+        if (!cloudCoverIsValid) missingFields.push("couverture nuageuse");
+        if (!visibilityIsValid) missingFields.push("visibilité");
+        
+        // Use wind speed as fallback for gust if gust is null/undefined but speed is available
+        const windGustForAI = (typeof currentData.wind?.gust === 'number')
+          ? currentData.wind.gust
+          : (windSpeedIsValid ? currentData.wind!.speed : undefined); 
+        
+        const windGustIsValidForAI = typeof windGustForAI === 'number';
+        if (!windGustIsValidForAI) {
+            missingFields.push("rafales de vent actuelles (ou vitesse du vent si rafales non spécifiées)");
+        }
+
+        if (missingFields.length > 0) {
           const warningMessage = `AI Safety Assessment: Critical weather data (${missingFields.join(', ')}) is missing or invalid. Cannot proceed with a reliable safety assessment. Data received: ${JSON.stringify(currentData)}`;
-          console.warn(warningMessage);
+          console.warn(warningMessage); // Changed to console.warn
           
           toast({
             title: "Évaluation de sécurité impossible",
@@ -109,23 +117,17 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
           return; 
         }
 
-        // All required fields (temp, windSpeed, cloudCover, visibility) are asserted to be numbers here due to the check above.
-        // Derive windGustForAI: use actual gust if available, otherwise use wind speed.
-        const windGustForAI = typeof currentData.wind?.gust === 'number' 
-          ? currentData.wind.gust 
-          : currentData.wind!.speed; // We know wind.speed is a number here.
-
         try {
           const assessmentInput = {
             temperature: currentData.temp as number, 
-            windSpeed: currentData.wind!.speed as number, // Asserting non-null due to windSpeedIsValid check
-            windGust: windGustForAI as number, // Ensured to be a number
+            windSpeed: currentData.wind!.speed as number, 
+            windGust: windGustForAI as number, // Already validated or has fallback
             precipitationType: currentData.precipitation?.type || "none",
             maxWindSpeed: activeDroneProfile.maxWindSpeed,
             minTemperature: activeDroneProfile.minTemp,
             maxTemperature: activeDroneProfile.maxTemp,
-            cloudCover: currentData.cloud_cover!.total as number, // Asserting non-null due to cloudCoverIsValid check
-            visibility: currentData.visibility!.total as number, // Asserting non-null due to visibilityIsValid check
+            cloudCover: currentData.cloud_cover!.total as number, 
+            visibility: currentData.visibility!.total as number, 
             cloudBaseHeight: currentData.cloud_base_height ?? null, 
           };
 
@@ -151,7 +153,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     } else {
       setSafetyAssessment(null); 
       if(weatherData && !weatherData.current){
-        console.warn("Weather data fetched, but current weather details are missing.");
+        console.warn("Weather data fetched, but current weather details are missing."); // Changed to warn
          toast({
             title: "Données météo actuelles manquantes",
             description: "Impossible de récupérer les conditions météo actuelles pour ce lieu.",
@@ -180,6 +182,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
         <Skeleton className="h-24 w-full rounded-lg" /> 
         <Skeleton className="h-64 w-full rounded-lg" /> 
         <Skeleton className="h-48 w-full rounded-lg" /> 
+        <Skeleton className="h-56 w-full rounded-lg" /> {/* Skeleton for daily forecast */}
       </div>
     );
   }
@@ -197,13 +200,12 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     );
   }
 
-  if (!weatherData || !weatherData.current) {
-    // This case also covers when API returns data but current is null.
-    let description = "Aucune donnée météo actuelle n'a été trouvée pour le lieu sélectionné ou les données sont incomplètes.";
-    if (isError && error?.message) { // If there was a fetch error leading to no data
+  if (!weatherData || (!weatherData.current && !weatherData.hourly?.data?.length && !weatherData.daily?.data?.length)) {
+    let description = "Aucune donnée météo actuelle ou prévisionnelle n'a été trouvée pour le lieu sélectionné ou les données sont incomplètes.";
+    if (isError && error?.message) { 
       description = error.message;
-    } else if (weatherData && !weatherData.current) {
-      description = "Les données météo actuelles pour ce lieu sont manquantes dans la réponse du service.";
+    } else if (weatherData && !weatherData.current && !weatherData.hourly?.data?.length && !weatherData.daily?.data?.length) {
+      description = "Les données météo pour ce lieu sont manquantes ou incomplètes dans la réponse du service.";
     }
     return (
       <Alert variant="destructive" className="mt-6 shadow-md">
@@ -214,6 +216,11 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     );
   }
   
+  if (weatherData) {
+    console.log('Rendered Weather Data Daily:', weatherData.daily?.data); // Logging for daily forecast
+  }
+
+
   return (
     <div className="space-y-6 mt-6 md:mt-0">
       {isAssessingSafety && !safetyAssessment ? ( 
@@ -223,7 +230,9 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
       )}
       {weatherData.current && <CurrentWeather data={weatherData.current} />}
       {weatherData.hourly?.data && weatherData.hourly.data.length > 0 && <HourlyForecastList data={weatherData.hourly.data} />}
+      {weatherData.daily?.data && weatherData.daily.data.length > 0 && (
+        <DailyForecastList data={weatherData.daily.data} />
+      )}
     </div>
   );
 }
-
