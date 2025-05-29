@@ -77,31 +77,59 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
         setSafetyAssessment(null); // Reset assessment at the beginning
 
         const currentData = weatherData.current;
+        
         const tempIsValid = typeof currentData.temp === 'number';
+        // Wind speed is required by schema, but less critical if gusts are the main safety factor with temp
         const windSpeedIsValid = currentData.wind && typeof currentData.wind.speed === 'number';
         const windGustIsValid = currentData.wind && typeof currentData.wind.gust === 'number';
 
-        if (!tempIsValid || !windSpeedIsValid || !windGustIsValid) {
-          console.warn(
-            `AI Safety Assessment: Weather data from API is incomplete or invalid for assessment. Required numeric fields: ` +
-            `Temperature (received: ${currentData.temp}), ` +
-            `Wind Speed (received: ${currentData.wind?.speed}), ` +
-            `Wind Gust (received: ${currentData.wind?.gust}). ` +
-            `Assessment will default to unsafe.`
-          );
+        if (!tempIsValid || !windGustIsValid) {
+          let missingFields = [];
+          if (!tempIsValid) missingFields.push("température actuelle");
+          if (!windGustIsValid) missingFields.push("rafales de vent actuelles");
+          
+          const warningMessage = `AI Safety Assessment: Données météo essentielles (${missingFields.join(', ')}) manquantes ou invalides. Impossible de procéder à une évaluation complète.`;
+          console.warn(warningMessage, currentData);
+          
           toast({
-            title: "Évaluation de sécurité impossible",
-            description: "Données météo essentielles (température, vitesse/rafales de vent) manquantes ou invalides pour l'évaluation.",
+            title: "Évaluation de sécurité limitée",
+            description: `Données météo essentielles (${missingFields.join(' et ')}) manquantes. Impossible d'évaluer la sécurité du vol de manière fiable.`,
             variant: "destructive",
           });
           setSafetyAssessment({
             safeToFly: false,
             indicatorColor: 'RED',
-            message: 'Données météo incomplètes ou invalides. Impossible d\'évaluer la sécurité du vol.'
+            message: `Données météo essentielles (${missingFields.join(' et ')}) manquantes. Impossible d'évaluer la sécurité du vol de manière fiable.`,
           });
           setIsAssessingSafety(false);
           return; 
         }
+
+        // Ensure windSpeedIsValid as well if it's strictly required, otherwise allow assessment
+        // For now, assessDroneSafety requires windSpeed.
+        if (!windSpeedIsValid) {
+           console.warn(
+            `AI Safety Assessment: Vitesse du vent actuelle manquante ou invalide. Evaluation de sécurité AI sera basée sur les autres paramètres.`,
+            currentData
+          );
+           // Decide if you still want to call the AI or set a RED status.
+           // For now, let's assume if temp & gust are fine, but speed is missing, it's still too risky.
+           // Or, we can make windSpeed optional in the AI schema if it's not critical.
+           // Let's err on the side of caution for now.
+           toast({
+            title: "Évaluation de sécurité limitée",
+            description: "Vitesse du vent actuelle manquante. Impossible d'évaluer la sécurité du vol de manière fiable.",
+            variant: "destructive",
+          });
+          setSafetyAssessment({
+            safeToFly: false,
+            indicatorColor: 'RED',
+            message: 'Vitesse du vent actuelle manquante. Impossible d\'évaluer la sécurité du vol de manière fiable.',
+          });
+          setIsAssessingSafety(false);
+          return;
+        }
+
 
         try {
           const assessmentInput = {
@@ -133,8 +161,6 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
       };
       performAssessment();
     } else {
-      // Reset assessment if there's no current weather data or no active drone profile
-      // This handles cases where coords are deselected or weatherData becomes null
       setSafetyAssessment(null);
     }
   }, [weatherData, activeDroneProfile, toast]);
@@ -149,8 +175,6 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     );
   }
   
-  // More specific loading state: show skeleton if query is loading/fetching,
-  // OR if we have current data but are still waiting for AI assessment.
   const showLoadingSkeleton = isLoading || isFetching || (weatherData?.current && isAssessingSafety && !safetyAssessment);
 
 
@@ -165,8 +189,6 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
   }
 
   if (isError && error) { 
-    // This specific error message is already handled by a toast.
-    // We can show a more generic error message here in the component body.
     return (
       <Alert variant="destructive" className="mt-6 shadow-md">
         <AlertTriangle className="h-5 w-5" />
@@ -180,8 +202,6 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
   }
 
   if (!weatherData || !weatherData.current) {
-    // This case might occur if the API call succeeds but returns no 'current' data,
-    // or if coords become valid but data fetching hasn't completed yet (though isLoading/isFetching should cover that)
     return (
       <Alert variant="default" className="mt-6 shadow-md">
         <CloudOff className="h-5 w-5" />
@@ -196,7 +216,7 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
   
   return (
     <div className="space-y-6 mt-6 md:mt-0">
-      {isAssessingSafety && !safetyAssessment ? ( // Show skeleton for safety indicator only when assessing
+      {isAssessingSafety && !safetyAssessment ? ( 
         <Skeleton className="h-24 w-full rounded-lg" />
       ) : (
         <SafetyIndicator assessment={safetyAssessment} />
@@ -206,3 +226,4 @@ export default function WeatherInfoComponent({ coords, activeDroneProfile }: Wea
     </div>
   );
 }
+
