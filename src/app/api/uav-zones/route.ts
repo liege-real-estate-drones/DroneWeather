@@ -28,7 +28,6 @@ async function fetchArcGisFeatures(url: string, params: URLSearchParams): Promis
   // ArcGIS services can return features in `features` or directly as an array if GeoJSON is requested
   // and the `features` property is how GeoJSON standard structures it.
   // The "time" services might wrap their attributes differently.
-  // Let's assume for "time" services, properties are nested under `attributes`.
   if (url.includes('Time_Download_Prod')) {
     return (data.features || []).map((f: any) => ({ type: 'Feature', properties: f.attributes, geometry: null }));
   }
@@ -43,50 +42,68 @@ function isZoneActive(
   targetDateTime: Date
 ): boolean {
   const zoneId = zoneFeature.properties?.uidAmsl || zoneFeature.properties?.OBJECTID?.toString();
+  const zoneName = zoneFeature.properties?.name || 'Unknown Name';
+
+  // console.log(`[isZoneActive Debug] Evaluating Zone: ID=${zoneId}, Name=${zoneName}, TargetDateTime=${targetDateTime.toISOString()}`);
 
   if (!zoneId) {
-    // console.warn("Zone feature missing ID for time rule linkage:", zoneFeature.properties);
+    // console.log(`[isZoneActive Debug] Zone ID is missing for feature. Properties:`, zoneFeature.properties);
     return false;
   }
 
   const relevantGeneralRules = generalTimeRules.filter(rule => rule.ParentID === zoneId || rule.childID === zoneId);
   const relevantSpecificRules = specificTimeRules.filter(rule => rule.ParentID === zoneId || rule.childID === zoneId);
 
+  // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Found ${relevantGeneralRules.length} general rules, ${relevantSpecificRules.length} specific rules.`);
+
   // 1. Vérifier les règles générales permanentes
   for (const rule of relevantGeneralRules) {
+    // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking General Rule (Permanent):`, rule);
     if (rule.permanent === 'YES' && rule.status === 'ACTIVE') {
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED General Rule (Permanent). Zone IS ACTIVE.`);
       return true;
     }
   }
 
   // 2. Vérifier les règles générales avec date/heure de début/fin
   for (const rule of relevantGeneralRules) {
+    // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking General Rule (Date/Time Interval):`, rule);
     if (rule.startDateTime && rule.endDateTime && rule.status === 'ACTIVE') {
       try {
         const interval = { start: new Date(rule.startDateTime), end: new Date(rule.endDateTime) };
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Interval: Start=${interval.start.toISOString()}, End=${interval.end.toISOString()}`);
         if (isWithinInterval(targetDateTime, interval)) {
+          // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED General Rule (Date/Time Interval). Zone IS ACTIVE.`);
           return true;
         }
       } catch(e) {
-        console.warn("Error parsing general rule date interval:", rule, e);
+        console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Error parsing general rule date interval:`, rule, e);
       }
     }
   }
   
   // 3. Vérifier les règles spécifiques
   for (const rule of relevantSpecificRules) {
-    if (rule.status !== 'ACTIVE') continue;
+    // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking Specific Rule:`, rule);
+    if (rule.status !== 'ACTIVE') {
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule status is not ACTIVE. Skipping.`);
+      continue;
+    }
 
     // Logique pour les jours de la semaine
     if (rule.days) {
       const activeDays = rule.days.split(',').map(d => dayStringToNumber(d.trim()));
       const targetDay = getDay(targetDateTime); // 0 (Dimanche) à 6 (Samedi)
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Day Check: RuleDays=${rule.days}, ActiveDaysNum=${activeDays}, TargetDayNum=${targetDay}`);
       if (!activeDays.includes(targetDay)) {
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule day mismatch. Skipping.`);
         continue; // Pas actif ce jour-là
       }
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule day MATCHED.`);
     }
 
     if (rule.writtenStartTime && rule.writtenEndTime) {
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Time Check: StartTime=${rule.writtenStartTime}, EndTime=${rule.writtenEndTime}`);
       try {
         const startHour = parseInt(rule.writtenStartTime.substring(0, 2), 10);
         const startMinute = parseInt(rule.writtenStartTime.substring(2, 4), 10);
@@ -94,7 +111,7 @@ function isZoneActive(
         const endMinute = parseInt(rule.writtenEndTime.substring(2, 4), 10);
 
         if (isNaN(startHour) || isNaN(startMinute) || isNaN(endHour) || isNaN(endMinute)) {
-          console.warn("Invalid time format in specific rule:", rule);
+          console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format in specific rule:`, rule);
           continue;
         }
 
@@ -105,38 +122,34 @@ function isZoneActive(
         const startTimeInMinutes = startHour * 60 + startMinute;
         let endTimeInMinutes = endHour * 60 + endMinute;
         
-        // Handle case where end time is on the next day (e.g., 22:00 - 02:00)
-        // For simplicity, if end time is less than start time, assume it crosses midnight
-        // A more robust solution would check TimeUnit if available.
-        if (endTimeInMinutes < startTimeInMinutes) { 
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: TargetTime(min)=${targetTimeInMinutes}, StartTime(min)=${startTimeInMinutes}, EndTime(min)=${endTimeInMinutes}`);
+        
+        if (endTimeInMinutes < startTimeInMinutes) { // Handle case where end time is on the next day
           if (targetTimeInMinutes >= startTimeInMinutes || targetTimeInMinutes <= endTimeInMinutes) {
+            // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (Time, Cross-Midnight). Zone IS ACTIVE.`);
             return true;
           }
         } else { // End time is on the same day
           if (targetTimeInMinutes >= startTimeInMinutes && targetTimeInMinutes <= endTimeInMinutes) {
+            // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (Time, Same Day). Zone IS ACTIVE.`);
             return true;
           }
         }
       } catch (e) {
-        console.warn("Error parsing specific rule time:", rule, e);
+        console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Error parsing specific rule time:`, rule, e);
       }
-    } else if (rule.TimeUnit === 'PERMANENT' && rule.status === 'ACTIVE') { // Specific rule marked as permanent
+    } else if (rule.TimeUnit === 'PERMANENT' && rule.status === 'ACTIVE') { 
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (TimeUnit=PERMANENT). Zone IS ACTIVE.`);
         return true;
     }
-    // If a specific rule matches the day but has no explicit time, or time parsing failed,
-    // we might consider it active for the whole day if no other specific time rules contradict.
-    // For now, if it matched by day and had no valid time, we don't make it active unless time parsing succeeded.
-    // If a rule has day constraints but no time constraints, we might assume it's active all day.
-    // This part needs clarification based on API spec for 'TimeUnit' and 'sunrise'/'sunset'.
-    // Let's assume if days match and no time, it's active for those days.
     else if (rule.days && !rule.writtenStartTime && !rule.writtenEndTime) {
-        // Already checked day match above, so if no time is specified, assume active for the day.
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (Day Match, No Time Specified). Zone IS ACTIVE.`);
         return true;
     }
-
-
+    // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule did not result in activation.`);
   }
 
+  // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name=${zoneName}: No active rules found. Zone IS NOT ACTIVE.`);
   return false; // Aucune règle active trouvée pour cette date/heure
 }
 
@@ -171,19 +184,19 @@ export async function GET(request: Request) {
 
     const commonTimeParams = new URLSearchParams({ where: '1=1', outFields: '*', f: 'json', resultRecordCount: '2000' });
     
-    // Fetching rules - these return Feature[] where properties are in `feature.attributes`
     const generalTimeFeaturesRaw = await fetchArcGisFeatures(GENERAL_TIME_SERVICE_URL, commonTimeParams);
     const specificTimeFeaturesRaw = await fetchArcGisFeatures(SPECIFIC_TIME_SERVICE_URL, commonTimeParams);
     
-    // Extract properties
     const generalTimeRules: GeneralTimeProperties[] = generalTimeFeaturesRaw.map(f => f.properties as GeneralTimeProperties);
     const specificTimeRules: SpecificTimeProperties[] = specificTimeFeaturesRaw.map(f => f.properties as SpecificTimeProperties);
 
     let activeGeoFeatures = allGeoFeatures;
     if (filterTimeParam) { // Only filter if a time filter is explicitly requested (e.g. "now")
+        // console.log(`[API uav-zones] Filtering ${allGeoFeatures.length} features for time: ${targetDateTime.toISOString()}`);
         activeGeoFeatures = allGeoFeatures.filter(feature =>
             isZoneActive(feature, generalTimeRules, specificTimeRules, targetDateTime)
         );
+        // console.log(`[API uav-zones] Found ${activeGeoFeatures.length} active features.`);
     }
 
 
@@ -203,3 +216,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
+
