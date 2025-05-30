@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { UnifiedCurrentWeatherData } from "@/types";
+import type { UnifiedCurrentWeatherData, UnifiedHourlyForecastItemData } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Thermometer, Wind, Cloud, Eye, Droplets, Gauge, Navigation, Umbrella, Sunrise, Sunset, ArrowDownUp } from "lucide-react";
 import Image from "next/image";
@@ -9,6 +9,7 @@ import { format, parseISO } from 'date-fns';
 
 interface CurrentWeatherProps {
   data: UnifiedCurrentWeatherData;
+  firstHourlyForecastItem?: UnifiedHourlyForecastItemData | null;
 }
 
 const getWeatherIconUrl = (iconCode: string | number | undefined | null, summary?: string): string => {
@@ -37,7 +38,7 @@ const getWeatherIconUrl = (iconCode: string | number | undefined | null, summary
 };
 
 
-export default function CurrentWeather({ data }: CurrentWeatherProps) {
+export default function CurrentWeather({ data, firstHourlyForecastItem }: CurrentWeatherProps) {
   const displayValue = (value: number | undefined | null, unit: string = "", precision: number = 1) => {
     return typeof value === 'number' ? `${value.toFixed(precision)}${unit}` : 'N/A';
   };
@@ -54,8 +55,15 @@ export default function CurrentWeather({ data }: CurrentWeatherProps) {
   const visibilityInKm = typeof data.visibility?.total === 'number' ? data.visibility.total / 1000 : null;
 
   const windSpeedDisplay = displayValue(data.wind?.speed, " m/s");
-  // For display, only show gust if it's a number. Otherwise, displayValue will render it as "N/A".
-  const windGustDisplay = displayValue(data.wind?.gust, " m/s");
+  
+  let windGustToDisplay: number | null | undefined = null;
+  if (typeof data.wind?.gust === 'number') {
+    windGustToDisplay = data.wind.gust;
+  } else if (typeof firstHourlyForecastItem?.wind?.gust === 'number') {
+    windGustToDisplay = firstHourlyForecastItem.wind.gust;
+  }
+  const windGustDisplay = displayValue(windGustToDisplay, " m/s");
+
 
   return (
     <Card className="shadow-lg">
