@@ -15,8 +15,9 @@ import {
   LOCAL_STORAGE_DEFAULT_DRONE_KEY
 } from '@/lib/constants';
 import type { Coordinates, DroneProfile } from '@/types';
+import type { FeatureCollection as GeoJSONFeatureCollection } from 'geojson';
 import { Separator } from '@/components/ui/separator';
-import { PlaneTakeoff, MapPinOff, LocateFixed, Save, Plane, Settings, X } from 'lucide-react';
+import { PlaneTakeoff, MapPinOff, LocateFixed, Save, Plane, Settings, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { APIProvider, MapCameraChangedEvent } from '@vis.gl/react-google-maps';
@@ -31,12 +32,27 @@ import {
   SheetFooter,
   SheetClose,
 } from "@/components/ui/sheet";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useQuery } from '@tanstack/react-query';
 
 interface SavedLocationState {
   selectedCoords: Coordinates;
   mapCenter: google.maps.LatLngLiteral;
   mapZoom: number;
 }
+
+// Function to fetch UAV zones
+const fetchUAVZones = async (): Promise<GeoJSONFeatureCollection | null> => {
+  const response = await fetch('/api/uav-zones');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response from UAV zones API' }));
+    console.error('Error fetching UAV zones:', errorData);
+    throw new Error(errorData.error || `Failed to fetch UAV zones: ${response.statusText}`);
+  }
+  return response.json();
+};
+
 
 export default function HomePage() {
   const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(ROLOUX_COORDS);
@@ -51,7 +67,33 @@ export default function HomePage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { toast } = useToast();
 
+  const [showUAVZones, setShowUAVZones] = useState(false);
+
   const googleMapsApiKey = process.env.NEXT_PUBLIC_Maps_API_KEY;
+
+  const {
+    data: uavZonesData,
+    isLoading: isLoadingUAVZones,
+    error: uavZonesError,
+    // refetch: refetchUAVZones, // Can be used to manually reload
+  } = useQuery<GeoJSONFeatureCollection | null, Error>({
+    queryKey: ['uavZones'],
+    queryFn: fetchUAVZones,
+    enabled: showUAVZones, // Only fetch data if showUAVZones is true
+    staleTime: 1000 * 60 * 60, // Cache for 1 hour
+    gcTime: 1000 * 60 * 60 * 2, // Keep in cache for 2 hours
+    retry: 1, // Retry once on failure
+  });
+
+  useEffect(() => {
+    if (uavZonesError) {
+      toast({
+        title: "Erreur Zones UAV",
+        description: uavZonesError.message || "Une erreur est survenue lors du chargement des zones UAV.",
+        variant: "destructive",
+      });
+    }
+  }, [uavZonesError, toast]);
 
   useEffect(() => {
     setIsClient(true);
@@ -83,12 +125,12 @@ export default function HomePage() {
       const allModelNames = [...DEFAULT_DRONE_PROFILES.map(p => p.name), DRONE_MODELS.CUSTOM];
       if (savedDroneModel && allModelNames.includes(savedDroneModel)) {
         setSelectedDroneModel(savedDroneModel);
-        if (savedDroneModel !== DRONE_MODELS.CUSTOM) {
-          const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === savedDroneModel);
-          if (profile) {
-            setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp });
-          }
-        } else {
+         const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === savedDroneModel);
+        if (profile) {
+             setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp });
+        } else if (savedDroneModel === DRONE_MODELS.CUSTOM) {
+          // If 'Custom' was saved, we need to load custom params or use fallback
+          // For now, custom params are not saved with the drone model string, so we fallback
            const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
            setCustomDroneParams({maxWindSpeed: fallbackProfile.maxWindSpeed, minTemp: fallbackProfile.minTemp, maxTemp: fallbackProfile.maxTemp});
         }
@@ -131,7 +173,6 @@ export default function HomePage() {
     setCustomDroneParams(data);
     setSelectedDroneModel(DRONE_MODELS.CUSTOM);
     toast({ title: "Paramètres personnalisés sauvegardés", description: "Vos paramètres de drone personnalisés sont maintenant actifs." });
-    // setIsSettingsOpen(false); // Keep settings open if user wants to save this as default drone
   };
 
   const handleLocateMe = () => {
@@ -149,7 +190,6 @@ export default function HomePage() {
         handleCoordsChange(coords); 
         toast({ title: "Position trouvée!", description: "Météo pour votre position actuelle." });
         setIsLocating(false);
-        // setIsSettingsOpen(false); // REMOVED: Keep settings sheet open
       },
       (error) => {
         let message = "Impossible d'obtenir la position.";
@@ -242,7 +282,7 @@ export default function HomePage() {
               DroneWeather
             </h1>
             <p className="text-lg text-muted-foreground">
-              Informations météo adaptées pour les pilotes de drone en Belgique.
+              Informations météo et zones UAV pour les pilotes de drone en Belgique.
             </p>
           </div>
           <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
@@ -252,11 +292,11 @@ export default function HomePage() {
                 <span className="sr-only">Ouvrir les paramètres</span>
               </Button>
             </SheetTrigger>
-            <SheetContent>
+            <SheetContent className="overflow-y-auto">
               <SheetHeader>
                 <SheetTitle>Paramètres</SheetTitle>
                 <SheetDescription>
-                  Configurez votre expérience DroneWeather ici.
+                  Configurez votre expérience DroneWeather.
                 </SheetDescription>
               </SheetHeader>
               <div className="grid gap-6 py-6">
@@ -291,8 +331,26 @@ export default function HomePage() {
                     </Button>
                   </div>
                 </div>
+                <Separator />
+                 <div>
+                  <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                    <Layers className="text-primary" />
+                    Couches Cartographiques
+                  </h3>
+                  <div className="flex items-center justify-between space-x-2 py-2">
+                    <Label htmlFor="uav-zones-toggle" className="text-base">
+                      Afficher Zones UAV
+                    </Label>
+                    <Switch
+                      id="uav-zones-toggle"
+                      checked={showUAVZones}
+                      onCheckedChange={setShowUAVZones}
+                    />
+                  </div>
+                  {isLoadingUAVZones && showUAVZones && <p className="text-sm text-muted-foreground">Chargement des zones UAV...</p>}
+                </div>
               </div>
-              <SheetFooter>
+              <SheetFooter className="mt-4">
                 <SheetClose asChild>
                   <Button type="button" variant="outline">Fermer</Button>
                 </SheetClose>
@@ -316,13 +374,18 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow">
           <div className="lg:col-span-1 h-[400px] lg:h-full">
-            <MapComponent
-              center={mapCenter}
-              zoom={mapZoom}
-              selectedCoordsForMarker={selectedCoords}
-              onCoordsChange={handleCoordsChange}
-              onCameraChange={handleCameraChange}
-            />
+            {googleMapsApiKey && (
+                <MapComponent
+                    center={mapCenter}
+                    zoom={mapZoom}
+                    selectedCoordsForMarker={selectedCoords}
+                    onCoordsChange={handleCoordsChange}
+                    onCameraChange={handleCameraChange}
+                    uavZonesData={uavZonesData ?? undefined} // Pass undefined if null
+                    showUAVZones={showUAVZones}
+                    isLoadingUAVZones={isLoadingUAVZones}
+                />
+            )}
           </div>
           <div className="lg:col-span-2">
             <WeatherInfoComponent
@@ -333,7 +396,7 @@ export default function HomePage() {
         </div>
         <footer className="text-center mt-8 py-4 border-t">
           <p className="text-sm text-muted-foreground">
-            Propulsé par Open-Meteo, OpenWeatherMap et Google AI. Carte par Google Maps.
+            Météo par Open-Meteo & OpenWeatherMap. Zones UAV via services.arcgis.com. Carte par Google Maps. IA par Google Gemini.
           </p>
         </footer>
       </div>
