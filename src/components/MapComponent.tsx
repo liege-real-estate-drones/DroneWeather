@@ -59,11 +59,14 @@ function MapCircleOverlay({
       });
     }
 
+    // Cleanup function to remove the circle when the component unmounts or props change
     return () => {
       if (circle) {
         circle.setMap(null);
       }
     };
+  // Ensure circle updates if any of these dependencies change.
+  // Explicitly list all dependencies that affect the circle's rendering.
   }, [map, mapsLib, circle, center, radius, strokeColor, strokeOpacity, strokeWeight, fillColor, fillOpacity]);
 
   return null;
@@ -97,7 +100,8 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         mapTypeControl={true}
         streetViewControl={true}
         fullscreenControl={true}
-        zoomControl={true} // Explicitly enable zoom control
+        zoomControl={true} // Ensure zoom control is enabled
+        panControl={false} // Disable pan (arrow) controls
         clickableIcons={false}
         mapId="droneWeatherMapStyle"
         renderingType="RASTER"
@@ -115,7 +119,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
             />
             <MapCircleOverlay
               center={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
-              radius={200} 
+              radius={200} // Radius in meters, e.g., 200m
               strokeColor={'hsl(var(--accent))'}
               strokeOpacity={0.8}
               strokeWeight={2}
