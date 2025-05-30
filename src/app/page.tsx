@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import dynamic from 'next/dynamic';
 import WeatherInfoComponent from '@/components/WeatherInfoComponent';
 import DroneProfileSelector from '@/components/DroneProfileSelector';
 import CustomDroneParamsForm from '@/components/CustomDroneParamsForm';
@@ -14,11 +13,7 @@ import { PlaneTakeoff, MapPinOff } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
 import { APIProvider, MapCameraChangedEvent } from '@vis.gl/react-google-maps';
-
-const MapComponent = dynamic(() => import('@/components/MapComponent'), {
-  ssr: false,
-  loading: () => <Skeleton className="h-[400px] md:h-full w-full rounded-lg shadow-lg" />,
-});
+import MapComponent from '@/components/MapComponent'; // MODIFIED: Direct import
 
 export default function HomePage() {
   const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
@@ -38,7 +33,7 @@ export default function HomePage() {
   const handleCoordsChange = useCallback((coords: Coordinates) => {
     setSelectedCoords(coords);
     setMapCenter({ lat: coords.lat, lng: coords.lng });
-    setMapZoom(DEFAULT_MAP_ZOOM + 4);
+    setMapZoom(DEFAULT_MAP_ZOOM + 4); // Zoom in when a location is selected
   }, []);
 
   const handleCameraChange = useCallback((ev: MapCameraChangedEvent) => {
