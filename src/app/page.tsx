@@ -17,7 +17,7 @@ import {
 import type { Coordinates, DroneProfile } from '@/types';
 import type { FeatureCollection as GeoJSONFeatureCollection, Feature as GeoJSONFeature, Geometry } from 'geojson';
 import { Separator } from '@/components/ui/separator';
-import { PlaneTakeoff, MapPin, LocateFixed, Save, Plane, Settings, Layers, Mountain, AlertTriangle, Loader2 } from 'lucide-react'; // Changed MapPinOff to MapPin
+import { PlaneTakeoff, MapPin, LocateFixed, Save, Plane, Settings, Layers, Mountain, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { APIProvider, MapCameraChangedEvent, useMapsLibrary } from '@vis.gl/react-google-maps';
@@ -43,7 +43,6 @@ interface SavedLocationState {
   mapZoom: number;
 }
 
-// Fonction pour récupérer les zones UAV
 const fetchUAVZones = async (): Promise<GeoJSONFeatureCollection | null> => {
   const response = await fetch('/api/uav-zones');
   if (!response.ok) {
@@ -54,14 +53,22 @@ const fetchUAVZones = async (): Promise<GeoJSONFeatureCollection | null> => {
   return response.json();
 };
 
-// Fonction pour récupérer l'altitude
 const fetchElevation = async (coords: Coordinates | null): Promise<{ elevation: number | null } | null> => {
   if (!coords) return null;
   const response = await fetch(`/api/elevation?lat=${coords.lat}&lng=${coords.lng}`);
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response from Elevation API' }));
-    console.error('Error fetching elevation:', errorData);
-    throw new Error(errorData.error || 'Failed to fetch elevation');
+    let errorJson: { error?: string; message?: string } = { error: `API responded with status ${response.status}` };
+    try {
+      // Attempt to parse the JSON body from our API route
+      errorJson = await response.json();
+    } catch (e) {
+      console.warn('Failed to parse JSON error response from /api/elevation. Status:', response.status, response.statusText);
+      // errorJson retains its default value
+    }
+    // Log the parsed (or fallback) error JSON from our API route
+    console.error('Error fetching elevation from /api/elevation. Status:', response.status, 'Response body:', errorJson);
+    // Throw an error with a message from errorJson.error, or a default message
+    throw new Error(errorJson.error || `Failed to fetch elevation, status: ${response.status}`);
   }
   return response.json();
 };
@@ -163,23 +170,21 @@ export default function HomePage() {
         setSelectedDroneModel(savedDroneModel);
          const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === savedDroneModel);
         if (profile) {
-             setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp });
+             setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp, notes: profile.notes });
         } else if (savedDroneModel === DRONE_MODELS.CUSTOM) {
-           // If custom is saved, but no specific params, use a sensible default like Mini 4 Pro's
            const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
-           setCustomDroneParams({maxWindSpeed: fallbackProfile.maxWindSpeed, minTemp: fallbackProfile.minTemp, maxTemp: fallbackProfile.maxTemp});
+           setCustomDroneParams({maxWindSpeed: fallbackProfile.maxWindSpeed, minTemp: fallbackProfile.minTemp, maxTemp: fallbackProfile.maxTemp, notes: fallbackProfile.notes});
         }
       } else {
         setSelectedDroneModel(DJI_MINI_4_PRO_PROFILE.name);
         const djiMini4Profile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
-        setCustomDroneParams({ maxWindSpeed: djiMini4Profile.maxWindSpeed, minTemp: djiMini4Profile.minTemp, maxTemp: djiMini4Profile.maxTemp });
+        setCustomDroneParams({ maxWindSpeed: djiMini4Profile.maxWindSpeed, minTemp: djiMini4Profile.minTemp, maxTemp: djiMini4Profile.maxTemp, notes: djiMini4Profile.notes });
       }
     } catch (error) {
       console.error("Erreur lors du chargement du drone par défaut depuis localStorage:", error);
       toast({ title: "Erreur de chargement", description: "Impossible de charger le drone par défaut.", variant: "destructive" });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []); 
 
   const handleCoordsChange = useCallback((coords: Coordinates) => {
     setSelectedCoords(coords);
@@ -199,12 +204,12 @@ export default function HomePage() {
     if (modelName !== DRONE_MODELS.CUSTOM) {
       const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === modelName);
       if (profile) {
-        setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp });
+        setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp, notes: profile.notes });
       }
     }
   };
 
-  const handleCustomParamsSubmit = (data: Omit<DroneProfile, 'name' | 'notes'>) => {
+  const handleCustomParamsSubmit = (data: Omit<DroneProfile, 'name'>) => {
     setCustomDroneParams(data);
     setSelectedDroneModel(DRONE_MODELS.CUSTOM);
     toast({ title: "Paramètres personnalisés sauvegardés", description: "Vos paramètres de drone personnalisés sont maintenant actifs." });
@@ -225,7 +230,6 @@ export default function HomePage() {
         handleCoordsChange(coords); 
         toast({ title: "Position trouvée!", description: "Météo pour votre position actuelle." });
         setIsLocating(false);
-        // setIsSettingsOpen(false); // Keep sheet open for saving if desired
       },
       (error) => {
         let message = "Impossible d'obtenir la position.";
@@ -276,19 +280,16 @@ export default function HomePage() {
 
   const activeDroneProfile: DroneProfile = useMemo(() => {
     if (selectedDroneModel === DRONE_MODELS.CUSTOM) {
-      return { name: DRONE_MODELS.CUSTOM, ...customDroneParams, notes: "Paramètres utilisateur personnalisés" };
+      return { name: DRONE_MODELS.CUSTOM, ...customDroneParams, notes: customDroneParams.notes || "Paramètres utilisateur personnalisés" };
     }
     const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === selectedDroneModel);
-    // Fallback to DJI Mini 4 Pro if profile not found or if custom params are needed but model isn't custom
     const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
     
-    // Ensure that even if a named drone is selected, its customParams match its default profile values initially
-    // This might be redundant if handleDroneModelChange already sets customDroneParams correctly
     const currentParams = (profile && selectedDroneModel !== DRONE_MODELS.CUSTOM) 
-        ? { maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp } 
+        ? { maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp, notes: profile.notes } 
         : customDroneParams;
 
-    return profile || { name: selectedDroneModel, ...currentParams, notes: "Profil par défaut ou valeurs personnalisées pour un drone nommé." } as DroneProfile;
+    return profile || { name: selectedDroneModel, ...currentParams, notes: currentParams.notes || "Profil par défaut ou valeurs personnalisées." } as DroneProfile;
   }, [selectedDroneModel, customDroneParams]);
 
   const intersectingUAVZone = useMemo(() => {
@@ -300,10 +301,8 @@ export default function HomePage() {
 
     for (const feature of uavZonesData.features) {
       if (feature.geometry) {
-        // Check if feature.properties exists
-        const properties = feature.properties as any; // Cast to any to access properties dynamically
+        const properties = feature.properties as any; 
         if (!properties) continue;
-
 
         if (feature.geometry.type === 'Polygon') {
           const coordinates = feature.geometry.coordinates[0].map(coord => ({ lat: coord[1], lng: coord[0] }));
@@ -338,7 +337,7 @@ export default function HomePage() {
   if (!googleMapsApiKey) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
-        <MapPin size={64} className="text-destructive mb-4" /> {/* Changed icon for clarity */}
+        <MapPin size={64} className="text-destructive mb-4" />
         <h2 className="text-2xl font-semibold text-destructive mb-2">Configuration requise</h2>
         <p className="text-lg text-muted-foreground">
           La clé API Google Maps est manquante.
@@ -370,7 +369,7 @@ export default function HomePage() {
                 <span className="sr-only">Ouvrir les paramètres</span>
               </Button>
             </SheetTrigger>
-            <SheetContent className="overflow-y-auto"> {/* Added overflow-y-auto */}
+            <SheetContent className="overflow-y-auto">
               <SheetHeader>
                 <SheetTitle>Paramètres</SheetTitle>
                 <SheetDescription>
@@ -428,7 +427,7 @@ export default function HomePage() {
                   {isLoadingUAVZones && showUAVZones && <p className="text-sm text-muted-foreground">Chargement des zones UAV...</p>}
                 </div>
               </div>
-              <SheetFooter className="mt-4"> {/* Ensure footer is not overlapping content */}
+              <SheetFooter className="mt-4"> 
                 <SheetClose asChild>
                   <Button type="button" variant="outline">Fermer</Button>
                 </SheetClose>
@@ -532,4 +531,3 @@ export default function HomePage() {
     </APIProvider>
   );
 }
-
