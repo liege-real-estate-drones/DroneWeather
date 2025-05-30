@@ -69,28 +69,23 @@ function MapCircleOverlay({
   return null;
 }
 
-
-interface MapComponentProps {
+// Props specific to MapComponentInternal
+interface MapComponentInternalProps {
   center: google.maps.LatLngLiteral;
   zoom: number;
   selectedCoordsForMarker: Coordinates | null;
-  onCoordsChange: (coords: Coordinates) => void;
-  onCameraChange: (event: MapCameraChangedEvent) => void;
   uavZonesData?: GeoJSONFeatureCollection | null;
   showUAVZones: boolean;
-  isLoadingUAVZones?: boolean;
 }
 
-function MapComponentInternal({ 
-    center, 
-    zoom, 
-    selectedCoordsForMarker, 
-    onCoordsChange, 
-    onCameraChange, 
-    uavZonesData,
-    showUAVZones,
-    // isLoadingUAVZones // passed but not directly used in MapComponentInternal for now
-}: MapComponentProps) {
+function MapComponentInternal({
+  center, 
+  zoom, 
+  selectedCoordsForMarker,
+  uavZonesData,
+  showUAVZones,
+}: MapComponentInternalProps) {
+  // console.log('[MapComponent.tsx] Rendering MapComponentInternal. Center:', center, "Zoom:", zoom, "SelectedCoords:", selectedCoordsForMarker, "ShowUAV:", showUAVZones);
   const map = useMap();
   const mapsLib = useMapsLibrary('maps');
   const [uavDataLayer, setUavDataLayer] = useState<google.maps.Data | null>(null);
@@ -102,7 +97,7 @@ function MapComponentInternal({
 
     let currentDataLayer = uavDataLayer;
     if (!currentDataLayer) {
-      currentDataLayer = new mapsLib.Data({ map }); // Associate with map immediately
+      currentDataLayer = new mapsLib.Data({ map }); 
       setUavDataLayer(currentDataLayer);
     }
 
@@ -112,37 +107,34 @@ function MapComponentInternal({
     const localInfoWindow = infoWindowRef.current;
 
     if (showUAVZones && uavZonesData && currentDataLayer) {
-      // Clear existing features before adding new ones
       currentDataLayer.forEach(feature => currentDataLayer!.remove(feature));
       currentDataLayer.addGeoJson(uavZonesData);
 
       currentDataLayer.setStyle(feature => {
-        let color = 'hsl(var(--muted))'; // Default color
+        let color = 'hsl(var(--muted))'; 
         let fOpacity = 0.20;
         const category = feature.getProperty('categoryType')?.toString().toUpperCase();
         const status = feature.getProperty('status')?.toString().toUpperCase();
         
-        // More specific status checks first
         if (status === 'PROHIBITED' || category === 'P') {
-          color = 'hsl(var(--destructive))'; // Red
+          color = 'hsl(var(--destructive))'; 
           fOpacity = 0.35;
         } else if (status === 'RESTRICTED' || category === 'R') {
-          color = 'hsl(var(--accent))'; // Orange/Yellow
+          color = 'hsl(var(--accent))'; 
           fOpacity = 0.30;
-        } else if (category === 'D') { // Danger Area
-          color = 'hsl(var(--primary))'; // Primary theme color (Sky Blue)
+        } else if (category === 'D') { 
+          color = 'hsl(var(--primary))'; 
           fOpacity = 0.25;
-        } else if (category?.includes('TRA') || category?.includes('TSA')) { // Temporary Reserved/Segregated
-          color = 'hsl(260, 70%, 60%)'; // Purple
+        } else if (category?.includes('TRA') || category?.includes('TSA')) { 
+          color = 'hsl(260, 70%, 60%)'; 
           fOpacity = 0.25;
         } else if (category === 'CTR') {
-            color = 'hsl(120, 70%, 40%)'; // Green
+            color = 'hsl(120, 70%, 40%)'; 
             fOpacity = 0.20;
-        } else if (category === 'RMZ' || category === 'TMZ') { // Radio/Transponder Mandatory Zone
-            color = 'hsl(40, 70%, 50%)'; // Brownish-orange
+        } else if (category === 'RMZ' || category === 'TMZ') { 
+            color = 'hsl(40, 70%, 50%)'; 
             fOpacity = 0.20;
         }
-        // Add more specific category checks as needed based on actual data
 
         return {
           fillColor: color,
@@ -153,7 +145,6 @@ function MapComponentInternal({
         };
       });
 
-      // Remove previous listeners to avoid duplicates
       google.maps.event.clearInstanceListeners(currentDataLayer);
 
       currentDataLayer.addListener('click', (event: google.maps.Data.MouseEvent) => {
@@ -170,7 +161,6 @@ function MapComponentInternal({
         const reason = event.feature.getProperty('reason') || 'N/A';
         const additionalInfo = event.feature.getProperty('additionalInfo') || 'N/A';
         const type = event.feature.getProperty('type') || 'N/A';
-
 
         let content = `<div style="font-family: var(--font-geist-sans, sans-serif); font-size: 0.8rem; max-width: 280px; max-height: 250px; overflow-y: auto; padding-right: 10px; line-height: 1.4;">`;
         content += `<h4 style="font-weight: 600; margin-bottom: 0.4rem; color: hsl(var(--primary));">Zone: ${featureName}</h4>`;
@@ -199,16 +189,15 @@ function MapComponentInternal({
         localInfoWindow.open(map);
       });
 
-      currentDataLayer.setMap(map); // Ensure layer is visible
+      currentDataLayer.setMap(map); 
     } else if (currentDataLayer) {
       currentDataLayer.forEach(feature => currentDataLayer!.remove(feature));
-      currentDataLayer.setMap(null); // Hide layer
+      currentDataLayer.setMap(null); 
       if (localInfoWindow) {
         localInfoWindow.close();
       }
     }
     
-    // Cleanup for data layer listeners
     return () => {
         if (currentDataLayer) {
             google.maps.event.clearInstanceListeners(currentDataLayer);
@@ -217,8 +206,7 @@ function MapComponentInternal({
             localInfoWindow.close();
         }
     };
-
-  }, [map, mapsLib, uavZonesData, showUAVZones, uavDataLayer]); // uavDataLayer added as dependency
+  }, [map, mapsLib, uavZonesData, showUAVZones, uavDataLayer]);
 
 
   return (
@@ -244,8 +232,7 @@ function MapComponentInternal({
   );
 }
 
-
-const arePropsEqual = (prevProps: MapComponentProps, nextProps: MapComponentProps) => {
+const arePropsEqual = (prevProps: MapComponentInternalProps, nextProps: MapComponentInternalProps) => {
   const centerSame = prevProps.center.lat === nextProps.center.lat && prevProps.center.lng === nextProps.center.lng;
   const zoomSame = prevProps.zoom === nextProps.zoom;
 
@@ -258,37 +245,45 @@ const arePropsEqual = (prevProps: MapComponentProps, nextProps: MapComponentProp
     )
   );
 
-  const callbacksSame = prevProps.onCoordsChange === nextProps.onCoordsChange && prevProps.onCameraChange === nextProps.onCameraChange;
-  const uavDataSame = prevProps.uavZonesData === nextProps.uavZonesData; // Could be shallow or deep, simple ref check for now
+  const uavDataSame = prevProps.uavZonesData === nextProps.uavZonesData;
   const showUAVZonesSame = prevProps.showUAVZones === nextProps.showUAVZones;
-  const isLoadingUAVZonesSame = prevProps.isLoadingUAVZones === nextProps.isLoadingUAVZones;
 
-  const allSame = centerSame && zoomSame && markerCoordsSame && callbacksSame && uavDataSame && showUAVZonesSame && isLoadingUAVZonesSame;
+  const allSame = centerSame && zoomSame && markerCoordsSame && uavDataSame && showUAVZonesSame;
 
   if (!allSame) {
-    console.log('[MapComponent.tsx] React.memo: Props ARE different, re-rendering MapComponentInternal. Changes:', {
-        centerChanged: !centerSame,
-        zoomChanged: !zoomSame,
-        markerCoordsChanged: !markerCoordsSame,
-        onCoordsChangeChanged: prevProps.onCoordsChange !== nextProps.onCoordsChange,
-        onCameraChangeChanged: prevProps.onCameraChange !== nextProps.onCameraChange,
-        uavDataChanged: !uavDataSame,
-        showUAVZonesChanged: !showUAVZonesSame,
-        isLoadingUAVZonesChanged: !isLoadingUAVZonesSame,
-      });
+    // console.log('[MapComponent.tsx] React.memo: Props for MapComponentInternal ARE different, re-rendering. Changes:', {
+    //     centerChanged: !centerSame,
+    //     zoomChanged: !zoomSame,
+    //     markerCoordsChanged: !markerCoordsSame,
+    //     uavDataChanged: !uavDataSame,
+    //     showUAVZonesChanged: !showUAVZonesSame,
+    //   });
+  } else {
+    // console.log('[MapComponent.tsx] React.memo: Props for MapComponentInternal are equal, skipping re-render.');
   }
   return allSame;
 };
 
 const MemoizedMapComponentInternal = memo(MapComponentInternal, arePropsEqual);
 
+// Props for the outer default exported component
+interface MapComponentProps {
+  center: google.maps.LatLngLiteral;
+  zoom: number;
+  selectedCoordsForMarker: Coordinates | null;
+  onCoordsChange: (coords: Coordinates) => void;
+  onCameraChange: (event: MapCameraChangedEvent) => void;
+  uavZonesData?: GeoJSONFeatureCollection | null;
+  showUAVZones: boolean;
+  isLoadingUAVZones?: boolean;
+}
 
 export default function MapComponent({ center, zoom, selectedCoordsForMarker, onCoordsChange, onCameraChange, uavZonesData, showUAVZones, isLoadingUAVZones }: MapComponentProps) {
-  // console.log('[MapComponent.tsx] Rendering MapComponent Wrapper. Center:', center, 'Zoom:', zoom, 'SelectedCoordsForMarker:', selectedCoordsForMarker, 'ShowUAV:', showUAVZones);
-  const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAP_ID_SILVER || "DEMO_MAP_ID";
+  const googleMapId = process.env.NEXT_PUBLIC_GOOGLE_MAP_ID_SILVER || "DEMO_MAP_ID";
+  // console.log('[MapComponent.tsx] Rendering MapComponent Wrapper. Center:', center, 'Zoom:', zoom, 'ShowUAV:', showUAVZones, 'IsLoadingUAV:', isLoadingUAVZones);
 
   return (
-    <div className="h-full w-full rounded-lg shadow-lg overflow-hidden" data-ai-hint="interactive google map">
+    <div className="h-full w-full rounded-lg shadow-lg overflow-hidden relative" data-ai-hint="interactive google map">
         <Map
             center={center}
             zoom={zoom}
@@ -301,7 +296,7 @@ export default function MapComponent({ center, zoom, selectedCoordsForMarker, on
             zoomControl={true}
             panControl={false} 
             clickableIcons={false}
-            mapId={mapId}
+            mapId={googleMapId}
             renderingType="RASTER"
             onClick={(e: MapMouseEvent) => {
               if (e.detail?.latLng) {
@@ -314,14 +309,11 @@ export default function MapComponent({ center, zoom, selectedCoordsForMarker, on
                 center={center}
                 zoom={zoom}
                 selectedCoordsForMarker={selectedCoordsForMarker}
-                onCoordsChange={onCoordsChange}
-                onCameraChange={onCameraChange}
                 uavZonesData={uavZonesData}
                 showUAVZones={showUAVZones}
-                isLoadingUAVZones={isLoadingUAVZones}
             />
         </Map>
-        {isLoadingUAVZones && showUAVZones && (
+       {isLoadingUAVZones && showUAVZones && (
          <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-background/80 backdrop-blur-sm p-2 rounded-md shadow-lg text-sm z-10">
            Chargement des zones UAV...
          </div>
@@ -330,3 +322,4 @@ export default function MapComponent({ center, zoom, selectedCoordsForMarker, on
   );
 }
 
+    

@@ -109,7 +109,7 @@ export default function HomePage() {
           initialCoords = savedLocation.selectedCoords;
           initialMapCenter = savedLocation.mapCenter;
           initialMapZoom = savedLocation.mapZoom;
-          toast({ title: "Lieu par défaut chargé", description: "Votre lieu sauvegardé a été chargé." });
+          // toast({ title: "Lieu par défaut chargé", description: "Votre lieu sauvegardé a été chargé." });
         }
       }
     } catch (error) {
@@ -134,7 +134,7 @@ export default function HomePage() {
            const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
            setCustomDroneParams({maxWindSpeed: fallbackProfile.maxWindSpeed, minTemp: fallbackProfile.minTemp, maxTemp: fallbackProfile.maxTemp});
         }
-        toast({ title: "Profil de drone par défaut chargé", description: `Le profil pour ${savedDroneModel} a été chargé.` });
+        // toast({ title: "Profil de drone par défaut chargé", description: `Le profil pour ${savedDroneModel} a été chargé.` });
       } else {
         setSelectedDroneModel(DJI_MINI_4_PRO_PROFILE.name);
         const djiMini4Profile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
@@ -144,7 +144,8 @@ export default function HomePage() {
       console.error("Erreur lors du chargement du drone par défaut depuis localStorage:", error);
       toast({ title: "Erreur de chargement", description: "Impossible de charger le drone par défaut.", variant: "destructive" });
     }
-  }, [toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Dependency array changed from [toast] to []
 
   const handleCoordsChange = useCallback((coords: Coordinates) => {
     setSelectedCoords(coords);
@@ -243,6 +244,7 @@ export default function HomePage() {
       return { name: DRONE_MODELS.CUSTOM, ...customDroneParams, notes: "Custom user parameters" };
     }
     const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === selectedDroneModel);
+    // Ensure a fallback profile if the selected one is somehow not found, or if customDroneParams needs a base for a named drone.
     const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
     return profile || { name: selectedDroneModel, ...customDroneParams, notes: "Default profile or custom values for a named drone." } as DroneProfile;
   }, [selectedDroneModel, customDroneParams]);
@@ -403,3 +405,5 @@ export default function HomePage() {
     </APIProvider>
   );
 }
+
+    
