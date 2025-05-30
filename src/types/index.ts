@@ -273,7 +273,7 @@ export interface ArcGISFeatureProperties {
   uidAmsl?: string;
   name?: string;
   categoryType?: string;
-  status?: string;
+  status?: string; // Expected to be "validated" by service query
   lowerAltitudeReference?: string;
   upperAltitudeReference?: string;
   lowerLimit?: number | string;
@@ -281,17 +281,17 @@ export interface ArcGISFeatureProperties {
   restriction?: string;
   reason?: string;
   additionalInfo?: string;
-  type?: string; // Pour l'infobulle
+  type?: string; 
   [key: string]: any;
 }
 
 export interface GeneralTimeProperties {
   ParentID?: string;
   childID?: string;
-  permanent?: string; // "YES" / "NO"
+  permanent?: string; // "1" or "0"
   startDateTime?: number; // Timestamp
   endDateTime?: number; // Timestamp
-  status?: string;
+  status?: string; // Expected to be "validated"
   name?: string;
   [key: string]: any;
 }
@@ -299,15 +299,15 @@ export interface GeneralTimeProperties {
 export interface SpecificTimeProperties {
   ParentID?: string;
   childID?: string;
-  startTime?: number; // Timestamp (peut-être juste l'heure, à vérifier)
-  endTime?: number; // Timestamp
-  TimeUnit?: string; // ex: "PERMANENT", "DAY", "WEEK", "MONTH"
-  days?: string; // ex: "MON,TUE,WED" ou numéros de jour 0-6
-  status?: string;
-  sunrise?: string; // "YES" / "NO"
-  sunset?: string; // "YES" / "NO"
-  writtenStartTime?: string; // "HHMM" ou "HHMMSS"
-  writtenEndTime?: string; // "HHMM" ou "HHMMSS"
+  startTime?: number; 
+  endTime?: number; 
+  TimeUnit?: string; // ex: "PERMANENT", "DAY", "WEEK", "MONTH", "utc"
+  days?: string; // ex: "1,2,3,4,5"
+  status?: string; // Expected to be "validated"
+  sunrise?: string; // "start", "stop", null
+  sunset?: string; // "start", "stop", null
+  writtenStartTime?: string; // "HH.MM.SS" or null
+  writtenEndTime?: string; // "HH.MM.SS" or null
   name?: string;
   [key: string]: any;
 }

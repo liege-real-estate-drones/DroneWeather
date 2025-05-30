@@ -19,7 +19,7 @@ async function fetchArcGisFeatures(url: string, params: URLSearchParams): Promis
   const data = await response.json();
   // ArcGIS services can return features in `features` or directly as an array if GeoJSON is requested
   // and the `features` property is how GeoJSON standard structures it.
-  // The "time" services might wrap their attributes differently.
+  // The "time" services might wrap their attributes differently (f.attributes).
   if (url.includes('Time_Download_Prod')) {
     return (data.features || []).map((f: any) => ({ type: 'Feature', properties: f.attributes, geometry: null }));
   }
@@ -85,9 +85,9 @@ function isZoneActive(
     // TODO: Implémenter la logique sunrise/sunset.
     // Pour l'instant, on saute les règles qui en dépendent pour éviter une évaluation incorrecte.
     if (rule.sunrise === 'start' || rule.sunset === 'stop' || 
-        (rule.writtenStartTime && rule.writtenStartTime.toLowerCase().includes('sunrise')) ||
-        (rule.writtenEndTime && rule.writtenEndTime.toLowerCase().includes('sunset'))) {
-      // console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Rule depends on sunrise/sunset, which is not yet implemented. Skipping rule:`, rule);
+        (rule.writtenStartTime && typeof rule.writtenStartTime === 'string' && rule.writtenStartTime.toLowerCase().includes('sunrise')) ||
+        (rule.writtenEndTime && typeof rule.writtenEndTime === 'string' && rule.writtenEndTime.toLowerCase().includes('sunset'))) {
+      console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Rule depends on sunrise/sunset, which is not yet implemented. Skipping rule:`, rule);
       continue; 
     }
 
@@ -233,4 +233,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
-
