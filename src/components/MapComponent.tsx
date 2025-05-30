@@ -165,7 +165,7 @@ function MapComponentInternal({
         let content = `<div style="font-family: var(--font-geist-sans, sans-serif); font-size: 0.8rem; max-width: 280px; max-height: 250px; overflow-y: auto; padding-right: 10px; line-height: 1.4;">`;
         content += `<h4 style="font-weight: 600; margin-bottom: 0.4rem; color: hsl(var(--primary));">Zone: ${featureName}</h4>`;
         
-        const propertiesMap = new Map([
+        const propertiesMap = new globalThis.Map([ // Use globalThis.Map to refer to native JS Map
             ['Type', type],
             ['Catégorie', categoryType],
             ['Statut', status],
@@ -232,6 +232,7 @@ function MapComponentInternal({
   );
 }
 
+
 const arePropsEqual = (prevProps: MapComponentInternalProps, nextProps: MapComponentInternalProps) => {
   const centerSame = prevProps.center.lat === nextProps.center.lat && prevProps.center.lng === nextProps.center.lng;
   const zoomSame = prevProps.zoom === nextProps.zoom;
@@ -245,22 +246,22 @@ const arePropsEqual = (prevProps: MapComponentInternalProps, nextProps: MapCompo
     )
   );
 
-  const uavDataSame = prevProps.uavZonesData === nextProps.uavZonesData;
+  const uavDataSame = prevProps.uavZonesData === nextProps.uavZonesData; 
   const showUAVZonesSame = prevProps.showUAVZones === nextProps.showUAVZones;
-
+  
   const allSame = centerSame && zoomSame && markerCoordsSame && uavDataSame && showUAVZonesSame;
 
-  if (!allSame) {
-    // console.log('[MapComponent.tsx] React.memo: Props for MapComponentInternal ARE different, re-rendering. Changes:', {
-    //     centerChanged: !centerSame,
-    //     zoomChanged: !zoomSame,
-    //     markerCoordsChanged: !markerCoordsSame,
-    //     uavDataChanged: !uavDataSame,
-    //     showUAVZonesChanged: !showUAVZonesSame,
-    //   });
-  } else {
-    // console.log('[MapComponent.tsx] React.memo: Props for MapComponentInternal are equal, skipping re-render.');
-  }
+  // if (!allSame) {
+  //   console.log('[MapComponent.tsx] React.memo: Props for MapComponentInternal ARE different, re-rendering. Changes:', {
+  //       centerChanged: !centerSame,
+  //       zoomChanged: !zoomSame,
+  //       markerCoordsChanged: !markerCoordsSame,
+  //       uavDataChanged: !uavDataSame,
+  //       showUAVZonesChanged: !showUAVZonesSame,
+  //     });
+  // } else {
+  //   console.log('[MapComponent.tsx] React.memo: Props for MapComponentInternal are equal, skipping re-render.');
+  // }
   return allSame;
 };
 
@@ -322,4 +323,5 @@ export default function MapComponent({ center, zoom, selectedCoordsForMarker, on
   );
 }
 
-    
+
+  
