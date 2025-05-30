@@ -1,10 +1,10 @@
 
 "use client";
 
+import { memo, useMemo, useEffect, useState } from 'react'; // Ensure all hooks are imported
 import { Map, AdvancedMarker, MapMouseEvent, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
-import { useMemo, useEffect, useState, memo } from 'react'; // Added memo
 
 interface MapCircleOverlayProps {
   center: google.maps.LatLngLiteral;
@@ -44,7 +44,7 @@ function MapCircleOverlay({
         strokeWeight,
         fillColor,
         fillOpacity,
-        clickable: false, 
+        clickable: false,
       });
       setCircle(newCircle);
     } else {
@@ -75,7 +75,9 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
+function MapComponentInternal({ selectedCoords, onCoordsChange }: MapComponentProps) {
+  console.log('[MapComponent.tsx] Rendering MapComponentInternal. SelectedCoords:', selectedCoords);
+
   const position = useMemo(() => (
     selectedCoords
     ? { lat: selectedCoords.lat, lng: selectedCoords.lng }
@@ -97,7 +99,7 @@ function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
         mapTypeControl={true}
         streetViewControl={true}
         fullscreenControl={true}
-        zoomControl={true} 
+        zoomControl={true}
         panControl={false}
         clickableIcons={false}
         mapId="droneWeatherMapStyle"
@@ -116,7 +118,7 @@ function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
             />
             <MapCircleOverlay
               center={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
-              radius={200} 
+              radius={200}
               strokeColor={'hsl(var(--accent))'}
               strokeOpacity={0.8}
               strokeWeight={2}
@@ -130,4 +132,30 @@ function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   );
 }
 
-export default memo(MapComponent);
+const arePropsEqual = (prevProps: MapComponentProps, nextProps: MapComponentProps) => {
+  const coordsSameOrBothNull = (
+    (prevProps.selectedCoords === null && nextProps.selectedCoords === null) ||
+    (
+      prevProps.selectedCoords !== null && nextProps.selectedCoords !== null &&
+      prevProps.selectedCoords.lat === nextProps.selectedCoords.lat &&
+      prevProps.selectedCoords.lng === nextProps.selectedCoords.lng
+    )
+  );
+  const callbackSame = prevProps.onCoordsChange === nextProps.onCoordsChange;
+
+  if (coordsSameOrBothNull && callbackSame) {
+    console.log('[MapComponent.tsx] React.memo: Props are equal, skipping re-render.');
+    return true; // Props are equal, skip re-render
+  }
+  
+  console.log(
+    '[MapComponent.tsx] React.memo: Props are different, re-rendering. Coords changed:', 
+    !coordsSameOrBothNull, 
+    'PrevCoords:', prevProps.selectedCoords, 
+    'NextCoords:', nextProps.selectedCoords,
+    'Callback changed:', !callbackSame
+  );
+  return false; // Props are different, re-render
+};
+
+export default memo(MapComponentInternal, arePropsEqual);
