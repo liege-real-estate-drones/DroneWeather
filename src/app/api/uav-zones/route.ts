@@ -9,14 +9,6 @@ const GEOMETRY_SERVICE_URL = 'https://services3.arcgis.com/om3vWi08kAyoBbj3/arcg
 const SPECIFIC_TIME_SERVICE_URL = 'https://services3.arcgis.com/om3vWi08kAyoBbj3/arcgis/rest/services/Specific_Time_Download_Prod/FeatureServer/0';
 const GENERAL_TIME_SERVICE_URL = 'https://services3.arcgis.com/om3vWi08kAyoBbj3/arcgis/rest/services/General_Time_Download_Prod/FeatureServer/0';
 
-// Helper pour convertir les jours textuels en numéros (0=Dimanche, 6=Samedi)
-const dayStringToNumber = (dayStr: string): number => {
-  const map: { [key: string]: number } = {
-    SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6,
-  };
-  return map[dayStr.toUpperCase()] ?? -1;
-};
-
 async function fetchArcGisFeatures(url: string, params: URLSearchParams): Promise<GeoJSONFeature[]> {
   const response = await fetch(`${url}/query?${params.toString()}`);
   if (!response.ok) {
@@ -59,7 +51,7 @@ function isZoneActive(
   // 1. Vérifier les règles générales permanentes
   for (const rule of relevantGeneralRules) {
     // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking General Rule (Permanent):`, rule);
-    if (rule.permanent === 'YES' && rule.status === 'ACTIVE') {
+    if (rule.permanent === '1') {
       // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED General Rule (Permanent). Zone IS ACTIVE.`);
       return true;
     }
@@ -68,7 +60,7 @@ function isZoneActive(
   // 2. Vérifier les règles générales avec date/heure de début/fin
   for (const rule of relevantGeneralRules) {
     // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking General Rule (Date/Time Interval):`, rule);
-    if (rule.startDateTime && rule.endDateTime && rule.status === 'ACTIVE') {
+    if (rule.startDateTime && rule.endDateTime) {
       try {
         const interval = { start: new Date(rule.startDateTime), end: new Date(rule.endDateTime) };
         // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Interval: Start=${interval.start.toISOString()}, End=${interval.end.toISOString()}`);
@@ -85,17 +77,33 @@ function isZoneActive(
   // 3. Vérifier les règles spécifiques
   for (const rule of relevantSpecificRules) {
     // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking Specific Rule:`, rule);
-    if (rule.status !== 'ACTIVE') {
-      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule status is not ACTIVE. Skipping.`);
-      continue;
-    }
+
+    // TODO: Implement sunrise/sunset logic.
+    // This will require integrating a weather API or an astronomical calculation library
+    // to determine the actual sunrise and sunset times for the zone's location and the targetDate.
+    // The current implementation only handles fixed times and permanent rules.
+    // Example of how it might be structured:
+    // if (rule.TimeReference === 'SUNRISE' || rule.TimeReference === 'SUNSET') {
+    //   // Fetch/calculate sunrise/sunset times for zone's location & targetDateTime
+    //   // Adjust rule.writtenStartTime/writtenEndTime based on offsets (e.g., SUNRISE+30 min)
+    //   // Then proceed with the time comparison logic below
+    // }
 
     // Logique pour les jours de la semaine
     if (rule.days) {
-      const activeDays = rule.days.split(',').map(d => dayStringToNumber(d.trim()));
-      const targetDay = getDay(targetDateTime); // 0 (Dimanche) à 6 (Samedi)
-      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Day Check: RuleDays=${rule.days}, ActiveDaysNum=${activeDays}, TargetDayNum=${targetDay}`);
-      if (!activeDays.includes(targetDay)) {
+      const activeDaysSkeyes = rule.days.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d)); // Parse to int, filter out NaN
+      let targetDaySkeyes = getDay(targetDateTime); // date-fns: 0 (Sun) to 6 (Sat)
+
+      // Convert targetDay to Skeyes convention (1=Mon, ..., 7=Sun)
+      if (targetDaySkeyes === 0) { // Sunday
+        targetDaySkeyes = 7;
+      }
+      // For Mon-Sat (1-6), date-fns getDay() is already aligned if we consider 1=Mon.
+      // Skeyes: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
+      // date-fns: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Day Check: RuleDays=${rule.days}, ActiveDaysSkeyes=${activeDaysSkeyes}, TargetDaySkeyes=${targetDaySkeyes}`);
+      if (!activeDaysSkeyes.includes(targetDaySkeyes)) {
         // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule day mismatch. Skipping.`);
         continue; // Pas actif ce jour-là
       }
@@ -105,13 +113,24 @@ function isZoneActive(
     if (rule.writtenStartTime && rule.writtenEndTime) {
       // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Time Check: StartTime=${rule.writtenStartTime}, EndTime=${rule.writtenEndTime}`);
       try {
-        const startHour = parseInt(rule.writtenStartTime.substring(0, 2), 10);
-        const startMinute = parseInt(rule.writtenStartTime.substring(2, 4), 10);
-        const endHour = parseInt(rule.writtenEndTime.substring(0, 2), 10);
-        const endMinute = parseInt(rule.writtenEndTime.substring(2, 4), 10);
+        const startTimeParts = rule.writtenStartTime.split('.');
+        const endTimeParts = rule.writtenEndTime.split('.');
+
+        if (startTimeParts.length < 2 || endTimeParts.length < 2) {
+          console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format (not enough parts) in specific rule:`, rule);
+          continue;
+        }
+
+        const startHour = parseInt(startTimeParts[0], 10);
+        const startMinute = parseInt(startTimeParts[1], 10);
+        // const startSecond = startTimeParts.length > 2 ? parseInt(startTimeParts[2], 10) : 0; // Seconds are not used in current logic
+
+        const endHour = parseInt(endTimeParts[0], 10);
+        const endMinute = parseInt(endTimeParts[1], 10);
+        // const endSecond = endTimeParts.length > 2 ? parseInt(endTimeParts[2], 10) : 0; // Seconds are not used in current logic
 
         if (isNaN(startHour) || isNaN(startMinute) || isNaN(endHour) || isNaN(endMinute)) {
-          console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format in specific rule:`, rule);
+          console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format (NaN) in specific rule:`, rule);
           continue;
         }
 
@@ -138,7 +157,7 @@ function isZoneActive(
       } catch (e) {
         console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Error parsing specific rule time:`, rule, e);
       }
-    } else if (rule.TimeUnit === 'PERMANENT' && rule.status === 'ACTIVE') { 
+    } else if (rule.TimeUnit === 'PERMANENT') {
         // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (TimeUnit=PERMANENT). Zone IS ACTIVE.`);
         return true;
     }
