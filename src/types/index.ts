@@ -1,3 +1,4 @@
+
 // src/types/index.ts
 
 export interface MeteosourceErrorDetailItem {
@@ -6,10 +7,10 @@ export interface MeteosourceErrorDetailItem {
   type: string;
 }
 
-export interface MeteosourceErrorResponse { // Renommer plus tard si besoin, gardé pour compatibilité de la structure d'erreur
-  error?: string; 
-  message?: string; 
-  detail?: string | MeteosourceErrorDetailItem[]; 
+export interface MeteosourceErrorResponse {
+  error?: string;
+  message?: string;
+  detail?: string | MeteosourceErrorDetailItem[];
 }
 
 // Types de données unifiés pour la météo, adaptés des anciens types Meteosource
@@ -32,7 +33,7 @@ export interface UnifiedCurrentWeatherData {
     total: number | null; // %
   };
   visibility: { // En mètres
-    total: number | null; 
+    total: number | null;
   };
   dew_point?: number | null; // °C
   pressure?: {
@@ -49,6 +50,21 @@ export interface UnifiedHourlyForecastItemData extends Omit<UnifiedCurrentWeathe
   precipitation_probability?: number | null; // %
 }
 
+export interface UnifiedDailyForecastItemData {
+  date: string; // YYYY-MM-DD
+  summary: string | null;
+  weather_icon_code: string | number | null;
+  temp_min: number | null;
+  temp_max: number | null;
+  wind_speed_max: number | null; // m/s
+  wind_gust_max: number | null; // m/s
+  precipitation_sum: number | null; // mm
+  precipitation_probability_max: number | null; // %
+  sunrise?: string | null; // ISO string
+  sunset?: string | null;  // ISO string
+}
+
+
 export interface UnifiedWeatherResponse {
   lat: string;
   lon: string;
@@ -59,10 +75,9 @@ export interface UnifiedWeatherResponse {
   hourly: {
     data: UnifiedHourlyForecastItemData[];
   } | null;
-  // daily: { // Pour astro, sera intégré dans current si possible ou via un autre champ
-  //   sunrise: string[] | null;
-  //   sunset: string[] | null;
-  // } | null;
+  daily: {
+    data: UnifiedDailyForecastItemData[];
+  };
 }
 
 // Types spécifiques pour les réponses brutes des API
@@ -118,8 +133,14 @@ export interface OpenMeteoDailyUnits {
 export interface OpenMeteoDaily {
     time: string[];
     weather_code?: number[];
+    temperature_2m_max?: number[];
+    temperature_2m_min?: number[];
     sunrise?: string[];
     sunset?: string[];
+    precipitation_sum?: number[];
+    precipitation_probability_max?: number[];
+    wind_speed_10m_max?: number[];
+    wind_gusts_10m_max?: number[];
 }
 
 export interface OpenMeteoResponse {
@@ -236,11 +257,57 @@ export interface DroneProfile {
   name: string;
   maxWindSpeed: number; // m/s
   minTemp: number; // °C
-  maxTemp: number; // °C
+  maxTemp: number; // °C;
+  notes?: string;
 }
 
 export interface SafetyAssessment {
   safeToFly: boolean;
   indicatorColor: 'GREEN' | 'ORANGE' | 'RED';
   message: string;
+}
+
+// Types pour ArcGIS UAV Zones
+export interface ArcGISFeatureProperties {
+  OBJECTID?: number;
+  uidAmsl?: string;
+  name?: string;
+  categoryType?: string;
+  status?: string;
+  lowerAltitudeReference?: string;
+  upperAltitudeReference?: string;
+  lowerLimit?: number | string;
+  upperLimit?: number | string;
+  restriction?: string;
+  reason?: string;
+  additionalInfo?: string;
+  type?: string; // Pour l'infobulle
+  [key: string]: any;
+}
+
+export interface GeneralTimeProperties {
+  ParentID?: string;
+  childID?: string;
+  permanent?: string; // "YES" / "NO"
+  startDateTime?: number; // Timestamp
+  endDateTime?: number; // Timestamp
+  status?: string;
+  name?: string;
+  [key: string]: any;
+}
+
+export interface SpecificTimeProperties {
+  ParentID?: string;
+  childID?: string;
+  startTime?: number; // Timestamp (peut-être juste l'heure, à vérifier)
+  endTime?: number; // Timestamp
+  TimeUnit?: string; // ex: "PERMANENT", "DAY", "WEEK", "MONTH"
+  days?: string; // ex: "MON,TUE,WED" ou numéros de jour 0-6
+  status?: string;
+  sunrise?: string; // "YES" / "NO"
+  sunset?: string; // "YES" / "NO"
+  writtenStartTime?: string; // "HHMM" ou "HHMMSS"
+  writtenEndTime?: string; // "HHMM" ou "HHMMSS"
+  name?: string;
+  [key: string]: any;
 }
