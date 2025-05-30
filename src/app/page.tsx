@@ -5,10 +5,18 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import WeatherInfoComponent from '@/components/WeatherInfoComponent';
 import DroneProfileSelector from '@/components/DroneProfileSelector';
 import CustomDroneParamsForm from '@/components/CustomDroneParamsForm';
-import { DEFAULT_DRONE_PROFILES, DJI_MINI_4_PRO_PROFILE, DRONE_MODELS, ROLOUX_COORDS, DEFAULT_MAP_ZOOM, LOCAL_STORAGE_DEFAULT_LOCATION_KEY } from '@/lib/constants';
+import {
+  DEFAULT_DRONE_PROFILES,
+  DJI_MINI_4_PRO_PROFILE,
+  DRONE_MODELS,
+  ROLOUX_COORDS,
+  DEFAULT_MAP_ZOOM,
+  LOCAL_STORAGE_DEFAULT_LOCATION_KEY,
+  LOCAL_STORAGE_DEFAULT_DRONE_KEY
+} from '@/lib/constants';
 import type { Coordinates, DroneProfile } from '@/types';
 import { Separator } from '@/components/ui/separator';
-import { PlaneTakeoff, MapPinOff, LocateFixed, Save } from 'lucide-react';
+import { PlaneTakeoff, MapPinOff, LocateFixed, Save, Plane } from 'lucide-react'; // Changed Drone to Plane
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { APIProvider, MapCameraChangedEvent } from '@vis.gl/react-google-maps';
@@ -24,8 +32,10 @@ export default function HomePage() {
   const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(ROLOUX_COORDS);
   const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>({ lat: ROLOUX_COORDS.lat, lng: ROLOUX_COORDS.lng });
   const [mapZoom, setMapZoom] = useState<number>(DEFAULT_MAP_ZOOM);
-  const [selectedDroneModel, setSelectedDroneModel] = useState<string>(DRONE_MODELS.MINI_4_PRO);
-  const [customDroneParams, setCustomDroneParams] = useState<Omit<DroneProfile, 'name'>>(DJI_MINI_4_PRO_PROFILE);
+  
+  const [selectedDroneModel, setSelectedDroneModel] = useState<string>(DJI_MINI_4_PRO_PROFILE.name);
+  const [customDroneParams, setCustomDroneParams] = useState<Omit<DroneProfile, 'name' | 'notes'>>(DJI_MINI_4_PRO_PROFILE);
+  
   const [isClient, setIsClient] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const { toast } = useToast();
@@ -34,6 +44,7 @@ export default function HomePage() {
 
   useEffect(() => {
     setIsClient(true);
+    // Load default location
     try {
       const savedLocationString = localStorage.getItem(LOCAL_STORAGE_DEFAULT_LOCATION_KEY);
       if (savedLocationString) {
@@ -44,17 +55,43 @@ export default function HomePage() {
           setMapZoom(savedLocation.mapZoom);
           toast({ title: "Lieu par défaut chargé", description: "Votre lieu sauvegardé a été chargé." });
         }
+      } else {
+        setSelectedCoords(ROLOUX_COORDS);
+        setMapCenter({ lat: ROLOUX_COORDS.lat, lng: ROLOUX_COORDS.lng });
+        setMapZoom(DEFAULT_MAP_ZOOM);
       }
     } catch (error) {
       console.error("Erreur lors du chargement du lieu par défaut depuis localStorage:", error);
       toast({ title: "Erreur de chargement", description: "Impossible de charger le lieu par défaut.", variant: "destructive" });
+    }
+
+    // Load default drone
+    try {
+      const savedDroneModel = localStorage.getItem(LOCAL_STORAGE_DEFAULT_DRONE_KEY);
+      const allModelNames = [...DEFAULT_DRONE_PROFILES.map(p => p.name), DRONE_MODELS.CUSTOM];
+      if (savedDroneModel && allModelNames.includes(savedDroneModel)) {
+        setSelectedDroneModel(savedDroneModel);
+        if (savedDroneModel !== DRONE_MODELS.CUSTOM) {
+          const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === savedDroneModel);
+          if (profile) {
+            setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp });
+          }
+        }
+        toast({ title: "Profil de drone par défaut chargé", description: `Le profil pour ${savedDroneModel} a été chargé.` });
+      } else {
+        setSelectedDroneModel(DJI_MINI_4_PRO_PROFILE.name);
+        setCustomDroneParams(DJI_MINI_4_PRO_PROFILE);
+      }
+    } catch (error) {
+      console.error("Erreur lors du chargement du drone par défaut depuis localStorage:", error);
+      toast({ title: "Erreur de chargement", description: "Impossible de charger le drone par défaut.", variant: "destructive" });
     }
   }, [toast]);
 
   const handleCoordsChange = useCallback((coords: Coordinates) => {
     setSelectedCoords(coords);
     setMapCenter({ lat: coords.lat, lng: coords.lng });
-    setMapZoom(DEFAULT_MAP_ZOOM + 2); // Zoom in closer when a specific location is selected
+    setMapZoom(DEFAULT_MAP_ZOOM + 2); 
   }, []);
 
   const handleCameraChange = useCallback((ev: MapCameraChangedEvent) => {
@@ -74,8 +111,9 @@ export default function HomePage() {
     }
   };
 
-  const handleCustomParamsSubmit = (data: Omit<DroneProfile, 'name'>) => {
+  const handleCustomParamsSubmit = (data: Omit<DroneProfile, 'name' | 'notes'>) => {
     setCustomDroneParams(data);
+    setSelectedDroneModel(DRONE_MODELS.CUSTOM);
     toast({ title: "Paramètres personnalisés sauvegardés", description: "Vos paramètres de drone personnalisés sont maintenant actifs." });
   };
 
@@ -91,7 +129,7 @@ export default function HomePage() {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         };
-        handleCoordsChange(coords); // This also sets mapCenter and mapZoom
+        handleCoordsChange(coords); 
         toast({ title: "Position trouvée!", description: "Météo pour votre position actuelle." });
         setIsLocating(false);
       },
@@ -107,7 +145,7 @@ export default function HomePage() {
         toast({ title: "Erreur de géolocalisation", description: message, variant: "destructive" });
         setIsLocating(false);
       },
-      { timeout: 10000 } // 10 seconds timeout
+      { timeout: 10000 } 
     );
   };
 
@@ -130,12 +168,24 @@ export default function HomePage() {
     }
   };
 
+  const handleSaveDefaultDrone = () => {
+    if (selectedDroneModel) {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_DEFAULT_DRONE_KEY, selectedDroneModel);
+        toast({ title: "Drone par défaut sauvegardé", description: `${selectedDroneModel} sera sélectionné au prochain démarrage.` });
+      } catch (error) {
+        console.error("Erreur lors de la sauvegarde du drone par défaut:", error);
+        toast({ title: "Erreur de sauvegarde", description: "Impossible de sauvegarder le drone par défaut.", variant: "destructive" });
+      }
+    }
+  };
+
   const activeDroneProfile: DroneProfile = useMemo(() => {
     if (selectedDroneModel === DRONE_MODELS.CUSTOM) {
-      return { name: DRONE_MODELS.CUSTOM, ...customDroneParams };
+      return { name: DRONE_MODELS.CUSTOM, ...customDroneParams, notes: "Custom user parameters" };
     }
     const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === selectedDroneModel);
-    return profile || { name: selectedDroneModel, ...customDroneParams };
+    return profile || { name: selectedDroneModel, ...customDroneParams, notes: "Default profile or custom values for a named drone." };
   }, [selectedDroneModel, customDroneParams]);
 
 
@@ -174,14 +224,18 @@ export default function HomePage() {
           <p className="text-lg text-muted-foreground">
             Informations météo adaptées pour les pilotes de drone en Belgique.
           </p>
-          <div className="flex space-x-2 mt-2">
+          <div className="flex flex-wrap gap-2 mt-2">
             <Button onClick={handleLocateMe} disabled={isLocating} variant="outline">
               <LocateFixed className="mr-2 h-4 w-4" />
               {isLocating ? "Localisation..." : "Me Localiser"}
             </Button>
             <Button onClick={handleSaveDefaultLocation} variant="outline">
               <Save className="mr-2 h-4 w-4" />
-              Enregistrer comme Défaut
+              Enregistrer Lieu Défaut
+            </Button>
+             <Button onClick={handleSaveDefaultDrone} variant="outline">
+              <Plane className="mr-2 h-4 w-4" /> {/* Changed Drone to Plane */}
+              Enregistrer Drone Défaut
             </Button>
           </div>
         </header>
@@ -198,14 +252,18 @@ export default function HomePage() {
                 onSubmit={handleCustomParamsSubmit}
               />
             )}
-            <Separator className="my-4" />
-            <div className="p-4 bg-card rounded-lg shadow-md">
-              <h3 className="font-semibold text-lg mb-2">Profil Actif : {activeDroneProfile.name}</h3>
-              <ul className="text-sm space-y-1 text-muted-foreground">
-                  <li>Vent max : {activeDroneProfile.maxWindSpeed} m/s</li>
-                  <li>Plage Temp. : {activeDroneProfile.minTemp}°C à {activeDroneProfile.maxTemp}°C</li>
-              </ul>
-            </div>
+             {activeDroneProfile && (
+                <div className="p-4 bg-card rounded-lg shadow-md">
+                <h3 className="font-semibold text-lg mb-2">Profil Actif : {activeDroneProfile.name}</h3>
+                <ul className="text-sm space-y-1 text-muted-foreground">
+                    <li>Vent max : {activeDroneProfile.maxWindSpeed} m/s</li>
+                    <li>Plage Temp. : {activeDroneProfile.minTemp}°C à {activeDroneProfile.maxTemp}°C</li>
+                    {activeDroneProfile.notes && (
+                         <li className="italic text-xs mt-1">Note: {activeDroneProfile.notes}</li>
+                    )}
+                </ul>
+                </div>
+            )}
           </aside>
 
           <main className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -235,3 +293,4 @@ export default function HomePage() {
     </APIProvider>
   );
 }
+
