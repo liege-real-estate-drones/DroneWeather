@@ -4,7 +4,7 @@
 import { Map, AdvancedMarker, MapMouseEvent, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
 import type { Coordinates } from '@/types';
-import { useMemo, useEffect, useState } from 'react'; 
+import { useMemo, useEffect, useState, memo } from 'react'; // Added memo
 
 interface MapCircleOverlayProps {
   center: google.maps.LatLngLiteral;
@@ -59,14 +59,11 @@ function MapCircleOverlay({
       });
     }
 
-    // Cleanup function to remove the circle when the component unmounts or props change
     return () => {
       if (circle) {
         circle.setMap(null);
       }
     };
-  // Ensure circle updates if any of these dependencies change.
-  // Explicitly list all dependencies that affect the circle's rendering.
   }, [map, mapsLib, circle, center, radius, strokeColor, strokeOpacity, strokeWeight, fillColor, fillOpacity]);
 
   return null;
@@ -78,7 +75,7 @@ interface MapComponentProps {
   onCoordsChange: (coords: Coordinates) => void;
 }
 
-export default function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
+function MapComponent({ selectedCoords, onCoordsChange }: MapComponentProps) {
   const position = useMemo(() => (
     selectedCoords
     ? { lat: selectedCoords.lat, lng: selectedCoords.lng }
@@ -100,8 +97,8 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
         mapTypeControl={true}
         streetViewControl={true}
         fullscreenControl={true}
-        zoomControl={true} // Ensure zoom control is enabled
-        panControl={false} // Disable pan (arrow) controls
+        zoomControl={true} 
+        panControl={false}
         clickableIcons={false}
         mapId="droneWeatherMapStyle"
         renderingType="RASTER"
@@ -119,7 +116,7 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
             />
             <MapCircleOverlay
               center={{ lat: selectedCoords.lat, lng: selectedCoords.lng }}
-              radius={200} // Radius in meters, e.g., 200m
+              radius={200} 
               strokeColor={'hsl(var(--accent))'}
               strokeOpacity={0.8}
               strokeWeight={2}
@@ -132,3 +129,5 @@ export default function MapComponent({ selectedCoords, onCoordsChange }: MapComp
     </div>
   );
 }
+
+export default memo(MapComponent);

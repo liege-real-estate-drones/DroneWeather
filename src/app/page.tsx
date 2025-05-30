@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
 import dynamic from 'next/dynamic';
 import WeatherInfoComponent from '@/components/WeatherInfoComponent';
 import DroneProfileSelector from '@/components/DroneProfileSelector';
@@ -34,9 +34,9 @@ export default function HomePage() {
   }, []);
 
 
-  const handleCoordsChange = (coords: Coordinates) => {
+  const handleCoordsChange = useCallback((coords: Coordinates) => {
     setSelectedCoords(coords);
-  };
+  }, []);
 
   const handleDroneModelChange = (modelName: string) => {
     setSelectedDroneModel(modelName);
@@ -122,7 +122,7 @@ export default function HomePage() {
           </aside>
 
           <main className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="md:col-span-1 h-[400px] md:h-full"> {/* Changed md:h-auto to md:h-full */}
+            <div className="md:col-span-1 h-[400px] md:h-full">
               <MapComponent selectedCoords={selectedCoords} onCoordsChange={handleCoordsChange} />
             </div>
             <div className="md:col-span-1">
@@ -135,7 +135,7 @@ export default function HomePage() {
         </div>
         <footer className="text-center mt-8 py-4 border-t">
           <p className="text-sm text-muted-foreground">
-            Propulsé par Open-Meteo, OpenWeatherMap et Google AI. Carte par Google Maps. {/* Updated attribution */}
+            Propulsé par Open-Meteo, OpenWeatherMap et Google AI. Carte par Google Maps.
           </p>
         </footer>
         <Toaster />
