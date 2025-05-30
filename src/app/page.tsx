@@ -17,7 +17,7 @@ import {
 import type { Coordinates, DroneProfile } from '@/types';
 import type { FeatureCollection as GeoJSONFeatureCollection, Feature as GeoJSONFeature, Geometry } from 'geojson';
 import { Separator } from '@/components/ui/separator';
-import { PlaneTakeoff, MapPinOff, LocateFixed, Save, Plane, Settings, Layers, Mountain, AlertTriangle, Loader2 } from 'lucide-react';
+import { PlaneTakeoff, MapPin, LocateFixed, Save, Plane, Settings, Layers, Mountain, AlertTriangle, Loader2 } from 'lucide-react'; // Changed MapPinOff to MapPin
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { APIProvider, MapCameraChangedEvent, useMapsLibrary } from '@vis.gl/react-google-maps';
@@ -105,9 +105,9 @@ export default function HomePage() {
   } = useQuery<{ elevation: number | null } | null, Error>({
     queryKey: ['elevation', selectedCoords],
     queryFn: () => fetchElevation(selectedCoords),
-    enabled: !!selectedCoords && !!googleMapsApiKey, // Only fetch if coords are selected and API key is available
-    staleTime: Infinity, // Elevation for a point rarely changes
-    gcTime: 1000 * 60 * 60 * 24, // Cache for 24 hours
+    enabled: !!selectedCoords && !!googleMapsApiKey, 
+    staleTime: Infinity, 
+    gcTime: 1000 * 60 * 60 * 24, 
     retry: 1,
   });
 
@@ -165,6 +165,7 @@ export default function HomePage() {
         if (profile) {
              setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp });
         } else if (savedDroneModel === DRONE_MODELS.CUSTOM) {
+           // If custom is saved, but no specific params, use a sensible default like Mini 4 Pro's
            const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
            setCustomDroneParams({maxWindSpeed: fallbackProfile.maxWindSpeed, minTemp: fallbackProfile.minTemp, maxTemp: fallbackProfile.maxTemp});
         }
@@ -178,7 +179,7 @@ export default function HomePage() {
       toast({ title: "Erreur de chargement", description: "Impossible de charger le drone par défaut.", variant: "destructive" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   const handleCoordsChange = useCallback((coords: Coordinates) => {
     setSelectedCoords(coords);
@@ -224,6 +225,7 @@ export default function HomePage() {
         handleCoordsChange(coords); 
         toast({ title: "Position trouvée!", description: "Météo pour votre position actuelle." });
         setIsLocating(false);
+        // setIsSettingsOpen(false); // Keep sheet open for saving if desired
       },
       (error) => {
         let message = "Impossible d'obtenir la position.";
@@ -274,11 +276,19 @@ export default function HomePage() {
 
   const activeDroneProfile: DroneProfile = useMemo(() => {
     if (selectedDroneModel === DRONE_MODELS.CUSTOM) {
-      return { name: DRONE_MODELS.CUSTOM, ...customDroneParams, notes: "Custom user parameters" };
+      return { name: DRONE_MODELS.CUSTOM, ...customDroneParams, notes: "Paramètres utilisateur personnalisés" };
     }
     const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === selectedDroneModel);
+    // Fallback to DJI Mini 4 Pro if profile not found or if custom params are needed but model isn't custom
     const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
-    return profile || { name: selectedDroneModel, ...customDroneParams, notes: "Default profile or custom values for a named drone." } as DroneProfile;
+    
+    // Ensure that even if a named drone is selected, its customParams match its default profile values initially
+    // This might be redundant if handleDroneModelChange already sets customDroneParams correctly
+    const currentParams = (profile && selectedDroneModel !== DRONE_MODELS.CUSTOM) 
+        ? { maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp } 
+        : customDroneParams;
+
+    return profile || { name: selectedDroneModel, ...currentParams, notes: "Profil par défaut ou valeurs personnalisées pour un drone nommé." } as DroneProfile;
   }, [selectedDroneModel, customDroneParams]);
 
   const intersectingUAVZone = useMemo(() => {
@@ -290,11 +300,16 @@ export default function HomePage() {
 
     for (const feature of uavZonesData.features) {
       if (feature.geometry) {
+        // Check if feature.properties exists
+        const properties = feature.properties as any; // Cast to any to access properties dynamically
+        if (!properties) continue;
+
+
         if (feature.geometry.type === 'Polygon') {
           const coordinates = feature.geometry.coordinates[0].map(coord => ({ lat: coord[1], lng: coord[0] }));
           const polygon = new google.maps.Polygon({ paths: coordinates });
           if (geometryLibrary.poly.containsLocation(point, polygon)) {
-            return feature as GeoJSONFeature<Geometry, any>; // Cast to include properties
+            return feature as GeoJSONFeature<Geometry, any>; 
           }
         } else if (feature.geometry.type === 'MultiPolygon') {
           for (const polyCoords of feature.geometry.coordinates) {
@@ -323,7 +338,7 @@ export default function HomePage() {
   if (!googleMapsApiKey) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
-        <MapPinOff size={64} className="text-destructive mb-4" />
+        <MapPin size={64} className="text-destructive mb-4" /> {/* Changed icon for clarity */}
         <h2 className="text-2xl font-semibold text-destructive mb-2">Configuration requise</h2>
         <p className="text-lg text-muted-foreground">
           La clé API Google Maps est manquante.
@@ -355,7 +370,7 @@ export default function HomePage() {
                 <span className="sr-only">Ouvrir les paramètres</span>
               </Button>
             </SheetTrigger>
-            <SheetContent className="overflow-y-auto">
+            <SheetContent className="overflow-y-auto"> {/* Added overflow-y-auto */}
               <SheetHeader>
                 <SheetTitle>Paramètres</SheetTitle>
                 <SheetDescription>
@@ -413,7 +428,7 @@ export default function HomePage() {
                   {isLoadingUAVZones && showUAVZones && <p className="text-sm text-muted-foreground">Chargement des zones UAV...</p>}
                 </div>
               </div>
-              <SheetFooter className="mt-4">
+              <SheetFooter className="mt-4"> {/* Ensure footer is not overlapping content */}
                 <SheetClose asChild>
                   <Button type="button" variant="outline">Fermer</Button>
                 </SheetClose>
@@ -442,7 +457,7 @@ export default function HomePage() {
             <Card className="shadow-md">
               <CardHeader className="pb-2 pt-4">
                 <CardTitle className="text-lg text-primary flex items-center gap-2">
-                  <MapPinOff size={20} /> Infos Point Sélectionné
+                  <MapPin size={20} /> Infos Point Sélectionné
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm space-y-1 text-muted-foreground pt-0">
@@ -451,27 +466,27 @@ export default function HomePage() {
                   {isLoadingElevation && <Loader2 className="h-4 w-4 animate-spin ml-1" />}
                   {elevationData && elevationData.elevation !== null && ` ${elevationData.elevation.toFixed(1)} m`}
                   {elevationData && elevationData.elevation === null && ' N/A'}
-                  {elevationError && ' Erreur'}
+                  {elevationError && <span className="text-destructive ml-1">Erreur</span>}
                 </p>
                 <div className="flex items-start gap-1">
                   <AlertTriangle size={16} className={intersectingUAVZone ? 'text-destructive' : 'text-green-500'} />
                   <span>
-                    UAV Zone: 
+                    Statut Zone UAV: 
                     {!geometryLibrary && ' (Chargement géométrie...)'}
                     {geometryLibrary && !showUAVZones && ' (Couche UAV désactivée)'}
                     {geometryLibrary && showUAVZones && isLoadingUAVZones && <Loader2 className="h-4 w-4 animate-spin inline ml-1" />}
-                    {geometryLibrary && showUAVZones && !isLoadingUAVZones && !uavZonesData && ' (Données UAV non chargées)'}
+                    {geometryLibrary && showUAVZones && !isLoadingUAVZones && uavZonesError && <span className="text-destructive ml-1">Erreur chargement zones</span>}
                     {geometryLibrary && showUAVZones && !isLoadingUAVZones && uavZonesData && intersectingUAVZone && (
                       <span className="font-semibold text-destructive">
-                        Dans la zone: {intersectingUAVZone.properties?.name || 'Nom inconnu'}
+                        Dans la zone "{intersectingUAVZone.properties?.name || 'Nom inconnu'}"
                         <br />
                         <span className="font-normal">
                           Type: {intersectingUAVZone.properties?.categoryType || 'N/A'}, 
                           Statut: {intersectingUAVZone.properties?.status || 'N/A'}
                           <br />
-                          Limites: {intersectingUAVZone.properties?.lowerLimit || 'N/A'} {intersectingUAVZone.properties?.lowerAltitudeUnit || ''}
+                          Limites (AGL/AMSL): {intersectingUAVZone.properties?.lowerLimit || 'N/A'} {intersectingUAVZone.properties?.lowerAltitudeUnit || ''} ({intersectingUAVZone.properties?.lowerAltitudeReference || 'N/A'})
                           {' - '}
-                          {intersectingUAVZone.properties?.upperLimit || 'N/A'} {intersectingUAVZone.properties?.upperAltitudeUnit || ''}
+                          {intersectingUAVZone.properties?.upperLimit || 'N/A'} {intersectingUAVZone.properties?.upperAltitudeUnit || ''} ({intersectingUAVZone.properties?.upperAltitudeReference || 'N/A'})
                         </span>
                       </span>
                     )}
@@ -517,3 +532,4 @@ export default function HomePage() {
     </APIProvider>
   );
 }
+
