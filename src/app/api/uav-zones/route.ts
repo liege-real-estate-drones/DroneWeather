@@ -46,15 +46,15 @@ function isZoneActive(
   const relevantGeneralRules = generalTimeRules.filter(rule => rule.ParentID === zoneId || rule.childID === zoneId);
   const relevantSpecificRules = specificTimeRules.filter(rule => rule.ParentID === zoneId || rule.childID === zoneId);
 
-  // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Found ${relevantGeneralRules.length} general rules, ${relevantSpecificRules.length} specific rules.`);
+  // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': Found ${relevantGeneralRules.length} general rules, ${relevantSpecificRules.length} specific rules.`);
 
   // 1. Vérifier les règles générales permanentes
   for (const rule of relevantGeneralRules) {
-    // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking General Rule (Permanent):`, rule);
-    // On considère que status='validated' et last_version='yes' sont déjà filtrés par la query ArcGIS
-    // donc on vérifie principalement 'permanent'.
-    if (rule.permanent === '1') {
-      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED General Rule (Permanent based on 'permanent: "1"'). Zone IS ACTIVE.`);
+    const permanentValue = rule.permanent;
+    const permanentType = typeof permanentValue;
+    // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, GeneralRule ParentID=${rule.ParentID}, childID=${rule.childID}: Checking for Permanent. Rule 'permanent' field value: [${permanentValue}], type: ${permanentType}`);
+    if (String(permanentValue).trim() === '1') {
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED General Rule (Permanent based on 'permanent: "${permanentValue}"'). Zone IS ACTIVE.`);
       return true;
     }
   }
@@ -63,8 +63,7 @@ function isZoneActive(
   for (const rule of relevantGeneralRules) {
     // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking General Rule (Date/Time Interval):`, rule);
     // Si la règle n'est pas explicitement permanente (permanent !== '1'), alors vérifier l'intervalle.
-    // On suppose toujours que status='validated' est déjà filtré par la query API.
-    if (rule.permanent !== '1' && rule.startDateTime && rule.endDateTime) {
+    if (String(rule.permanent).trim() !== '1' && rule.startDateTime && rule.endDateTime) {
       try {
         const interval = { start: new Date(rule.startDateTime), end: new Date(rule.endDateTime) };
         // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Interval: Start=${interval.start.toISOString()}, End=${interval.end.toISOString()}`);
@@ -73,7 +72,7 @@ function isZoneActive(
           return true;
         }
       } catch(e) {
-        console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Error parsing general rule date interval:`, rule, e);
+        // console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Error parsing general rule date interval:`, rule, e);
       }
     }
   }
@@ -81,14 +80,13 @@ function isZoneActive(
   // 3. Vérifier les règles spécifiques
   for (const rule of relevantSpecificRules) {
     // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking Specific Rule:`, rule);
-    // On suppose que status='validated' et last_version='yes' sont déjà filtrés par la query ArcGIS.
 
     // TODO: Implémenter la logique sunrise/sunset.
     // Pour l'instant, on saute les règles qui en dépendent pour éviter une évaluation incorrecte.
     if (rule.sunrise === 'start' || rule.sunset === 'stop' || 
         (rule.writtenStartTime && typeof rule.writtenStartTime === 'string' && rule.writtenStartTime.toLowerCase().includes('sunrise')) ||
         (rule.writtenEndTime && typeof rule.writtenEndTime === 'string' && rule.writtenEndTime.toLowerCase().includes('sunset'))) {
-      console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Rule depends on sunrise/sunset, which is not yet implemented. Skipping rule:`, rule);
+      // console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Rule depends on sunrise/sunset, which is not yet implemented. Skipping rule:`, rule);
       continue; 
     }
 
@@ -97,7 +95,7 @@ function isZoneActive(
       const activeDaysSkeyes = rule.days.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d));
       
       let targetDayFromDateFns = getDay(targetDateTime); // date-fns: 0 (Sun) to 6 (Sat)
-      // Convention Skeyes : 1=Lundi, ..., 7=Dimanche
+      // Convention Skeyes supposée : 1=Lundi, ..., 7=Dimanche. À VÉRIFIER !
       const targetDaySkeyes = (targetDayFromDateFns === 0) ? 7 : targetDayFromDateFns;
 
       // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Day Check: RuleDaysSkeyes=${rule.days}, ParsedActiveDaysSkeyes=${activeDaysSkeyes}, TargetDaySkeyes=${targetDaySkeyes}`);
@@ -115,7 +113,7 @@ function isZoneActive(
         const endTimeParts = rule.writtenEndTime.split('.');   // Attend "HH.MM.SS"
 
         if (startTimeParts.length < 2 || endTimeParts.length < 2) { // Au moins Heure et Minute
-          console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format (not enough parts) in specific rule:`, rule);
+          // console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format (not enough parts) in specific rule:`, rule);
           continue;
         }
 
@@ -128,7 +126,7 @@ function isZoneActive(
         // const endSecond = endTimeParts.length > 2 ? parseInt(endTimeParts[2], 10) : 0; // Optionnel
 
         if (isNaN(startHour) || isNaN(startMinute) || isNaN(endHour) || isNaN(endMinute)) {
-          console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format (NaN after parsing parts) in specific rule:`, rule);
+          // console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format (NaN after parsing parts) in specific rule:`, rule);
           continue;
         }
 
@@ -153,7 +151,7 @@ function isZoneActive(
           }
         }
       } catch (e) {
-        console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Error parsing specific rule time string:`, rule.writtenStartTime, rule.writtenEndTime, e);
+        // console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Error parsing specific rule time string:`, rule.writtenStartTime, rule.writtenEndTime, e);
       }
     } else if (rule.TimeUnit === 'PERMANENT') { // S'il y a un champ TimeUnit explicitement PERMANENT
         // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (TimeUnit=PERMANENT). Zone IS ACTIVE.`);
