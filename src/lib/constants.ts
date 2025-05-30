@@ -20,7 +20,7 @@ export const DEFAULT_DRONE_PROFILES: DroneProfile[] = [
   DJI_AVATA_2_PROFILE,
 ];
 
-// Coordinates for Vieille ruelle 31, 4347 Roloux, Belgique
+// Coordonnées pour Vieille ruelle 31, 4347 Roloux, Belgique
 export const ROLOUX_COORDS: Coordinates = {
   lat: 50.6550,
   lng: 5.3850,
@@ -28,10 +28,12 @@ export const ROLOUX_COORDS: Coordinates = {
 
 export const BELGIUM_CENTER: Coordinates = ROLOUX_COORDS; // Default to Roloux
 
-export const DEFAULT_MAP_ZOOM = 16; // Zoom level for village view
+export const DEFAULT_MAP_ZOOM = 16; // Zoom level for Roloux view
 
 export const DRONE_MODELS = {
   MINI_4_PRO: 'DJI Mini 4 Pro',
   AVATA_2: 'DJI Avata 2',
   CUSTOM: 'Custom',
 } as const;
+
+export const LOCAL_STORAGE_DEFAULT_LOCATION_KEY = 'droneWeatherAppDefaultLocation';

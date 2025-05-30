@@ -5,34 +5,56 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import WeatherInfoComponent from '@/components/WeatherInfoComponent';
 import DroneProfileSelector from '@/components/DroneProfileSelector';
 import CustomDroneParamsForm from '@/components/CustomDroneParamsForm';
-import { DEFAULT_DRONE_PROFILES, DJI_MINI_4_PRO_PROFILE, DRONE_MODELS, BELGIUM_CENTER, DEFAULT_MAP_ZOOM, ROLOUX_COORDS } from '@/lib/constants';
+import { DEFAULT_DRONE_PROFILES, DJI_MINI_4_PRO_PROFILE, DRONE_MODELS, ROLOUX_COORDS, DEFAULT_MAP_ZOOM, LOCAL_STORAGE_DEFAULT_LOCATION_KEY } from '@/lib/constants';
 import type { Coordinates, DroneProfile } from '@/types';
 import { Separator } from '@/components/ui/separator';
-import { PlaneTakeoff, MapPinOff } from 'lucide-react';
-import { Toaster } from '@/components/ui/toaster';
+import { PlaneTakeoff, MapPinOff, LocateFixed, Save } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { APIProvider, MapCameraChangedEvent } from '@vis.gl/react-google-maps';
 import MapComponent from '@/components/MapComponent';
 
+interface SavedLocationState {
+  selectedCoords: Coordinates;
+  mapCenter: google.maps.LatLngLiteral;
+  mapZoom: number;
+}
+
 export default function HomePage() {
-  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(ROLOUX_COORDS); // Default to Roloux
+  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(ROLOUX_COORDS);
   const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>({ lat: ROLOUX_COORDS.lat, lng: ROLOUX_COORDS.lng });
-  const [mapZoom, setMapZoom] = useState<number>(DEFAULT_MAP_ZOOM); // Default zoom for Roloux
+  const [mapZoom, setMapZoom] = useState<number>(DEFAULT_MAP_ZOOM);
   const [selectedDroneModel, setSelectedDroneModel] = useState<string>(DRONE_MODELS.MINI_4_PRO);
   const [customDroneParams, setCustomDroneParams] = useState<Omit<DroneProfile, 'name'>>(DJI_MINI_4_PRO_PROFILE);
   const [isClient, setIsClient] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   const { toast } = useToast();
 
   const googleMapsApiKey = process.env.NEXT_PUBLIC_Maps_API_KEY;
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    try {
+      const savedLocationString = localStorage.getItem(LOCAL_STORAGE_DEFAULT_LOCATION_KEY);
+      if (savedLocationString) {
+        const savedLocation: SavedLocationState = JSON.parse(savedLocationString);
+        if (savedLocation.selectedCoords && savedLocation.mapCenter && typeof savedLocation.mapZoom === 'number') {
+          setSelectedCoords(savedLocation.selectedCoords);
+          setMapCenter(savedLocation.mapCenter);
+          setMapZoom(savedLocation.mapZoom);
+          toast({ title: "Lieu par défaut chargé", description: "Votre lieu sauvegardé a été chargé." });
+        }
+      }
+    } catch (error) {
+      console.error("Erreur lors du chargement du lieu par défaut depuis localStorage:", error);
+      toast({ title: "Erreur de chargement", description: "Impossible de charger le lieu par défaut.", variant: "destructive" });
+    }
+  }, [toast]);
 
   const handleCoordsChange = useCallback((coords: Coordinates) => {
     setSelectedCoords(coords);
     setMapCenter({ lat: coords.lat, lng: coords.lng });
-    setMapZoom(DEFAULT_MAP_ZOOM + 2); // Zoom in closer when a specific location is selected by click
+    setMapZoom(DEFAULT_MAP_ZOOM + 2); // Zoom in closer when a specific location is selected
   }, []);
 
   const handleCameraChange = useCallback((ev: MapCameraChangedEvent) => {
@@ -55,6 +77,57 @@ export default function HomePage() {
   const handleCustomParamsSubmit = (data: Omit<DroneProfile, 'name'>) => {
     setCustomDroneParams(data);
     toast({ title: "Paramètres personnalisés sauvegardés", description: "Vos paramètres de drone personnalisés sont maintenant actifs." });
+  };
+
+  const handleLocateMe = () => {
+    if (!navigator.geolocation) {
+      toast({ title: "Géolocalisation non supportée", description: "Votre navigateur ne supporte pas la géolocalisation.", variant: "destructive" });
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords: Coordinates = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        handleCoordsChange(coords); // This also sets mapCenter and mapZoom
+        toast({ title: "Position trouvée!", description: "Météo pour votre position actuelle." });
+        setIsLocating(false);
+      },
+      (error) => {
+        let message = "Impossible d'obtenir la position.";
+        if (error.code === error.PERMISSION_DENIED) {
+          message = "Permission de géolocalisation refusée.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          message = "Information de position non disponible.";
+        } else if (error.code === error.TIMEOUT) {
+          message = "La demande de géolocalisation a expiré.";
+        }
+        toast({ title: "Erreur de géolocalisation", description: message, variant: "destructive" });
+        setIsLocating(false);
+      },
+      { timeout: 10000 } // 10 seconds timeout
+    );
+  };
+
+  const handleSaveDefaultLocation = () => {
+    if (selectedCoords) {
+      try {
+        const locationToSave: SavedLocationState = {
+          selectedCoords,
+          mapCenter,
+          mapZoom,
+        };
+        localStorage.setItem(LOCAL_STORAGE_DEFAULT_LOCATION_KEY, JSON.stringify(locationToSave));
+        toast({ title: "Lieu par défaut sauvegardé", description: "Ce lieu sera chargé au prochain démarrage." });
+      } catch (error) {
+        console.error("Erreur lors de la sauvegarde du lieu par défaut:", error);
+        toast({ title: "Erreur de sauvegarde", description: "Impossible de sauvegarder le lieu par défaut.", variant: "destructive" });
+      }
+    } else {
+      toast({ title: "Aucun lieu sélectionné", description: "Veuillez d'abord sélectionner un lieu sur la carte.", variant: "destructive" });
+    }
   };
 
   const activeDroneProfile: DroneProfile = useMemo(() => {
@@ -99,8 +172,18 @@ export default function HomePage() {
             DroneWeather
           </h1>
           <p className="text-lg text-muted-foreground">
-            Informations météo adaptées pour les pilotes de drone en Belgique. Point par défaut : Roloux.
+            Informations météo adaptées pour les pilotes de drone en Belgique.
           </p>
+          <div className="flex space-x-2 mt-2">
+            <Button onClick={handleLocateMe} disabled={isLocating} variant="outline">
+              <LocateFixed className="mr-2 h-4 w-4" />
+              {isLocating ? "Localisation..." : "Me Localiser"}
+            </Button>
+            <Button onClick={handleSaveDefaultLocation} variant="outline">
+              <Save className="mr-2 h-4 w-4" />
+              Enregistrer comme Défaut
+            </Button>
+          </div>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow">
@@ -127,7 +210,7 @@ export default function HomePage() {
 
           <main className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-1 h-[400px] md:h-full">
-              <MapComponent
+               <MapComponent
                 center={mapCenter}
                 zoom={mapZoom}
                 selectedCoordsForMarker={selectedCoords}
@@ -148,7 +231,6 @@ export default function HomePage() {
             Propulsé par Open-Meteo, OpenWeatherMap et Google AI. Carte par Google Maps.
           </p>
         </footer>
-        <Toaster />
       </div>
     </APIProvider>
   );
