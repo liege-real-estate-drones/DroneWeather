@@ -16,11 +16,21 @@ import {
 } from '@/lib/constants';
 import type { Coordinates, DroneProfile } from '@/types';
 import { Separator } from '@/components/ui/separator';
-import { PlaneTakeoff, MapPinOff, LocateFixed, Save, Plane } from 'lucide-react'; // Changed Drone to Plane
+import { PlaneTakeoff, MapPinOff, LocateFixed, Save, Plane, Settings, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { APIProvider, MapCameraChangedEvent } from '@vis.gl/react-google-maps';
 import MapComponent from '@/components/MapComponent';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+  SheetFooter,
+  SheetClose,
+} from "@/components/ui/sheet";
 
 interface SavedLocationState {
   selectedCoords: Coordinates;
@@ -29,8 +39,8 @@ interface SavedLocationState {
 }
 
 export default function HomePage() {
-  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(ROLOUX_COORDS);
-  const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>({ lat: ROLOUX_COORDS.lat, lng: ROLOUX_COORDS.lng });
+  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
+  const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>(ROLOUX_COORDS);
   const [mapZoom, setMapZoom] = useState<number>(DEFAULT_MAP_ZOOM);
   
   const [selectedDroneModel, setSelectedDroneModel] = useState<string>(DJI_MINI_4_PRO_PROFILE.name);
@@ -38,34 +48,36 @@ export default function HomePage() {
   
   const [isClient, setIsClient] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { toast } = useToast();
 
   const googleMapsApiKey = process.env.NEXT_PUBLIC_Maps_API_KEY;
 
   useEffect(() => {
     setIsClient(true);
-    // Load default location
+    let initialCoords = ROLOUX_COORDS;
+    let initialMapCenter = ROLOUX_COORDS;
+    let initialMapZoom = DEFAULT_MAP_ZOOM;
+
     try {
       const savedLocationString = localStorage.getItem(LOCAL_STORAGE_DEFAULT_LOCATION_KEY);
       if (savedLocationString) {
         const savedLocation: SavedLocationState = JSON.parse(savedLocationString);
         if (savedLocation.selectedCoords && savedLocation.mapCenter && typeof savedLocation.mapZoom === 'number') {
-          setSelectedCoords(savedLocation.selectedCoords);
-          setMapCenter(savedLocation.mapCenter);
-          setMapZoom(savedLocation.mapZoom);
+          initialCoords = savedLocation.selectedCoords;
+          initialMapCenter = savedLocation.mapCenter;
+          initialMapZoom = savedLocation.mapZoom;
           toast({ title: "Lieu par défaut chargé", description: "Votre lieu sauvegardé a été chargé." });
         }
-      } else {
-        setSelectedCoords(ROLOUX_COORDS);
-        setMapCenter({ lat: ROLOUX_COORDS.lat, lng: ROLOUX_COORDS.lng });
-        setMapZoom(DEFAULT_MAP_ZOOM);
       }
     } catch (error) {
       console.error("Erreur lors du chargement du lieu par défaut depuis localStorage:", error);
       toast({ title: "Erreur de chargement", description: "Impossible de charger le lieu par défaut.", variant: "destructive" });
     }
+    setSelectedCoords(initialCoords);
+    setMapCenter(initialMapCenter);
+    setMapZoom(initialMapZoom);
 
-    // Load default drone
     try {
       const savedDroneModel = localStorage.getItem(LOCAL_STORAGE_DEFAULT_DRONE_KEY);
       const allModelNames = [...DEFAULT_DRONE_PROFILES.map(p => p.name), DRONE_MODELS.CUSTOM];
@@ -76,6 +88,12 @@ export default function HomePage() {
           if (profile) {
             setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp });
           }
+        } else {
+          // If 'Custom' is saved, try to load custom params if they exist
+          // For simplicity, we're not saving custom params to localStorage in this iteration
+          // So, 'Custom' will revert to DJI Mini 4 Pro params if no specific custom params are loaded here
+           const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
+           setCustomDroneParams({maxWindSpeed: fallbackProfile.maxWindSpeed, minTemp: fallbackProfile.minTemp, maxTemp: fallbackProfile.maxTemp});
         }
         toast({ title: "Profil de drone par défaut chargé", description: `Le profil pour ${savedDroneModel} a été chargé.` });
       } else {
@@ -115,6 +133,7 @@ export default function HomePage() {
     setCustomDroneParams(data);
     setSelectedDroneModel(DRONE_MODELS.CUSTOM);
     toast({ title: "Paramètres personnalisés sauvegardés", description: "Vos paramètres de drone personnalisés sont maintenant actifs." });
+    setIsSettingsOpen(false); // Close sheet after saving custom params
   };
 
   const handleLocateMe = () => {
@@ -132,6 +151,7 @@ export default function HomePage() {
         handleCoordsChange(coords); 
         toast({ title: "Position trouvée!", description: "Météo pour votre position actuelle." });
         setIsLocating(false);
+        setIsSettingsOpen(false); // Close sheet after locating
       },
       (error) => {
         let message = "Impossible d'obtenir la position.";
@@ -216,73 +236,101 @@ export default function HomePage() {
   return (
     <APIProvider apiKey={googleMapsApiKey}>
       <div className="min-h-screen flex flex-col p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-background to-muted/30">
-        <header className="mb-6">
-          <h1 className="text-4xl font-bold text-primary flex items-center gap-2">
-            <PlaneTakeoff size={40} />
-            DroneWeather
-          </h1>
-          <p className="text-lg text-muted-foreground">
-            Informations météo adaptées pour les pilotes de drone en Belgique.
-          </p>
-          <div className="flex flex-wrap gap-2 mt-2">
-            <Button onClick={handleLocateMe} disabled={isLocating} variant="outline">
-              <LocateFixed className="mr-2 h-4 w-4" />
-              {isLocating ? "Localisation..." : "Me Localiser"}
-            </Button>
-            <Button onClick={handleSaveDefaultLocation} variant="outline">
-              <Save className="mr-2 h-4 w-4" />
-              Enregistrer Lieu Défaut
-            </Button>
-             <Button onClick={handleSaveDefaultDrone} variant="outline">
-              <Plane className="mr-2 h-4 w-4" /> {/* Changed Drone to Plane */}
-              Enregistrer Drone Défaut
-            </Button>
+        <header className="mb-6 flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-primary flex items-center gap-2">
+              <PlaneTakeoff size={40} />
+              DroneWeather
+            </h1>
+            <p className="text-lg text-muted-foreground">
+              Informations météo adaptées pour les pilotes de drone en Belgique.
+            </p>
           </div>
+          <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon">
+                <Settings className="h-5 w-5" />
+                <span className="sr-only">Ouvrir les paramètres</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent>
+              <SheetHeader>
+                <SheetTitle>Paramètres</SheetTitle>
+                <SheetDescription>
+                  Configurez votre expérience DroneWeather ici.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="grid gap-6 py-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">Profil de Drone</h3>
+                  <DroneProfileSelector
+                    selectedModel={selectedDroneModel}
+                    onModelChange={handleDroneModelChange}
+                  />
+                  {selectedDroneModel === DRONE_MODELS.CUSTOM && (
+                    <CustomDroneParamsForm
+                      initialValues={customDroneParams}
+                      onSubmit={handleCustomParamsSubmit}
+                    />
+                  )}
+                  <Button onClick={handleSaveDefaultDrone} variant="outline" className="w-full mt-4">
+                    <Plane className="mr-2 h-4 w-4" />
+                    Enregistrer Drone Défaut
+                  </Button>
+                </div>
+                <Separator />
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">Localisation</h3>
+                  <div className="space-y-2">
+                    <Button onClick={handleLocateMe} disabled={isLocating} variant="outline" className="w-full">
+                      <LocateFixed className="mr-2 h-4 w-4" />
+                      {isLocating ? "Localisation..." : "Me Localiser"}
+                    </Button>
+                    <Button onClick={handleSaveDefaultLocation} variant="outline" className="w-full">
+                      <Save className="mr-2 h-4 w-4" />
+                      Enregistrer Lieu Défaut
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <SheetFooter>
+                <SheetClose asChild>
+                  <Button type="button" variant="outline">Fermer</Button>
+                </SheetClose>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
         </header>
+        
+        {activeDroneProfile && (
+          <div className="mb-6 p-4 bg-card rounded-lg shadow-md">
+            <h3 className="font-semibold text-lg mb-2 text-primary">Profil Actif : {activeDroneProfile.name}</h3>
+            <ul className="text-sm space-y-1 text-muted-foreground">
+                <li>Vent max : {activeDroneProfile.maxWindSpeed} m/s</li>
+                <li>Plage Temp. : {activeDroneProfile.minTemp}°C à {activeDroneProfile.maxTemp}°C</li>
+                {activeDroneProfile.notes && (
+                      <li className="italic text-xs mt-1">Note: {activeDroneProfile.notes}</li>
+                )}
+            </ul>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow">
-          <aside className="lg:col-span-1 space-y-6">
-            <DroneProfileSelector
-              selectedModel={selectedDroneModel}
-              onModelChange={handleDroneModelChange}
+          <div className="lg:col-span-1 h-[400px] lg:h-full">
+            <MapComponent
+              center={mapCenter}
+              zoom={mapZoom}
+              selectedCoordsForMarker={selectedCoords}
+              onCoordsChange={handleCoordsChange}
+              onCameraChange={handleCameraChange}
             />
-            {selectedDroneModel === DRONE_MODELS.CUSTOM && (
-              <CustomDroneParamsForm
-                initialValues={customDroneParams}
-                onSubmit={handleCustomParamsSubmit}
-              />
-            )}
-             {activeDroneProfile && (
-                <div className="p-4 bg-card rounded-lg shadow-md">
-                <h3 className="font-semibold text-lg mb-2">Profil Actif : {activeDroneProfile.name}</h3>
-                <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>Vent max : {activeDroneProfile.maxWindSpeed} m/s</li>
-                    <li>Plage Temp. : {activeDroneProfile.minTemp}°C à {activeDroneProfile.maxTemp}°C</li>
-                    {activeDroneProfile.notes && (
-                         <li className="italic text-xs mt-1">Note: {activeDroneProfile.notes}</li>
-                    )}
-                </ul>
-                </div>
-            )}
-          </aside>
-
-          <main className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="md:col-span-1 h-[400px] md:h-full">
-               <MapComponent
-                center={mapCenter}
-                zoom={mapZoom}
-                selectedCoordsForMarker={selectedCoords}
-                onCoordsChange={handleCoordsChange}
-                onCameraChange={handleCameraChange}
-              />
-            </div>
-            <div className="md:col-span-1">
-              <WeatherInfoComponent
-                coords={selectedCoords}
-                activeDroneProfile={activeDroneProfile}
-              />
-            </div>
-          </main>
+          </div>
+          <div className="lg:col-span-2">
+            <WeatherInfoComponent
+              coords={selectedCoords}
+              activeDroneProfile={activeDroneProfile}
+            />
+          </div>
         </div>
         <footer className="text-center mt-8 py-4 border-t">
           <p className="text-sm text-muted-foreground">
@@ -294,3 +342,4 @@ export default function HomePage() {
   );
 }
 
+    
