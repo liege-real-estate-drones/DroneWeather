@@ -5,20 +5,19 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import WeatherInfoComponent from '@/components/WeatherInfoComponent';
 import DroneProfileSelector from '@/components/DroneProfileSelector';
 import CustomDroneParamsForm from '@/components/CustomDroneParamsForm';
-import { DEFAULT_DRONE_PROFILES, DJI_MINI_4_PRO_PROFILE, DRONE_MODELS, BELGIUM_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
+import { DEFAULT_DRONE_PROFILES, DJI_MINI_4_PRO_PROFILE, DRONE_MODELS, BELGIUM_CENTER, DEFAULT_MAP_ZOOM, ROLOUX_COORDS } from '@/lib/constants';
 import type { Coordinates, DroneProfile } from '@/types';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { PlaneTakeoff, MapPinOff } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
 import { APIProvider, MapCameraChangedEvent } from '@vis.gl/react-google-maps';
-import MapComponent from '@/components/MapComponent'; // MODIFIED: Direct import
+import MapComponent from '@/components/MapComponent';
 
 export default function HomePage() {
-  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
-  const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>({ lat: BELGIUM_CENTER.lat, lng: BELGIUM_CENTER.lng });
-  const [mapZoom, setMapZoom] = useState<number>(DEFAULT_MAP_ZOOM);
+  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(ROLOUX_COORDS); // Default to Roloux
+  const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>({ lat: ROLOUX_COORDS.lat, lng: ROLOUX_COORDS.lng });
+  const [mapZoom, setMapZoom] = useState<number>(DEFAULT_MAP_ZOOM); // Default zoom for Roloux
   const [selectedDroneModel, setSelectedDroneModel] = useState<string>(DRONE_MODELS.MINI_4_PRO);
   const [customDroneParams, setCustomDroneParams] = useState<Omit<DroneProfile, 'name'>>(DJI_MINI_4_PRO_PROFILE);
   const [isClient, setIsClient] = useState(false);
@@ -33,7 +32,7 @@ export default function HomePage() {
   const handleCoordsChange = useCallback((coords: Coordinates) => {
     setSelectedCoords(coords);
     setMapCenter({ lat: coords.lat, lng: coords.lng });
-    setMapZoom(DEFAULT_MAP_ZOOM + 4); // Zoom in when a location is selected
+    setMapZoom(DEFAULT_MAP_ZOOM + 2); // Zoom in closer when a specific location is selected by click
   }, []);
 
   const handleCameraChange = useCallback((ev: MapCameraChangedEvent) => {
@@ -100,7 +99,7 @@ export default function HomePage() {
             DroneWeather
           </h1>
           <p className="text-lg text-muted-foreground">
-            Informations météo adaptées pour les pilotes de drone en Belgique.
+            Informations météo adaptées pour les pilotes de drone en Belgique. Point par défaut : Roloux.
           </p>
         </header>
 

@@ -1,3 +1,4 @@
+
 import type { DroneProfile, Coordinates } from '@/types';
 
 export const DJI_MINI_4_PRO_PROFILE: DroneProfile = {
@@ -19,12 +20,15 @@ export const DEFAULT_DRONE_PROFILES: DroneProfile[] = [
   DJI_AVATA_2_PROFILE,
 ];
 
-export const BELGIUM_CENTER: Coordinates = {
-  lat: 50.5039,
-  lng: 4.4699,
+// Coordinates for Vieille ruelle 31, 4347 Roloux, Belgique
+export const ROLOUX_COORDS: Coordinates = {
+  lat: 50.6550,
+  lng: 5.3850,
 };
 
-export const DEFAULT_MAP_ZOOM = 8;
+export const BELGIUM_CENTER: Coordinates = ROLOUX_COORDS; // Default to Roloux
+
+export const DEFAULT_MAP_ZOOM = 16; // Zoom level for village view
 
 export const DRONE_MODELS = {
   MINI_4_PRO: 'DJI Mini 4 Pro',
