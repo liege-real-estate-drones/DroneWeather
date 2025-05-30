@@ -35,7 +35,7 @@ export async function GET(request: Request) {
         const googleErrorJson = await response.json();
         errorDetailMessage = googleErrorJson.error_message || googleErrorJson.status || errorDetailMessage;
         // Log the detailed error from Google
-        console.error('Google Elevation API Error (Status ${response.status}):', JSON.stringify(googleErrorJson));
+        console.error(`Google Elevation API Error (Status ${response.status}):`, JSON.stringify(googleErrorJson));
       } catch (e) {
         console.error('Failed to parse JSON error response from Google Elevation API, or Google API returned non-JSON error.');
         errorDetailMessage += ` (${response.statusText || 'Failed to fetch details'})`;
@@ -56,11 +56,18 @@ export async function GET(request: Request) {
       throw new Error(googleApiErrorMessage);
     }
   } catch (error) {
-    console.error('Error in /api/elevation route:', error instanceof Error ? error.message : String(error));
+    const rawErrorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Error in /api/elevation route:', rawErrorMessage);
+    
     let errorMessage = 'An unexpected error occurred while fetching elevation.';
-    if (error instanceof Error) {
+    if (error instanceof Error && error.message && error.message.trim() !== '') {
         errorMessage = error.message;
+    } else if (typeof error === 'string' && error.trim() !== '') {
+        errorMessage = error;
     }
+    // If error.message was empty/undefined, or error wasn't an Error instance or a non-empty string,
+    // errorMessage retains its default "An unexpected error..."
+    
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
