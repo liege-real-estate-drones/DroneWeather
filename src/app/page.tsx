@@ -39,7 +39,7 @@ interface SavedLocationState {
 }
 
 export default function HomePage() {
-  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
+  const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(ROLOUX_COORDS);
   const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>(ROLOUX_COORDS);
   const [mapZoom, setMapZoom] = useState<number>(DEFAULT_MAP_ZOOM);
   
@@ -89,16 +89,14 @@ export default function HomePage() {
             setCustomDroneParams({ maxWindSpeed: profile.maxWindSpeed, minTemp: profile.minTemp, maxTemp: profile.maxTemp });
           }
         } else {
-          // If 'Custom' is saved, try to load custom params if they exist
-          // For simplicity, we're not saving custom params to localStorage in this iteration
-          // So, 'Custom' will revert to DJI Mini 4 Pro params if no specific custom params are loaded here
            const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
            setCustomDroneParams({maxWindSpeed: fallbackProfile.maxWindSpeed, minTemp: fallbackProfile.minTemp, maxTemp: fallbackProfile.maxTemp});
         }
         toast({ title: "Profil de drone par défaut chargé", description: `Le profil pour ${savedDroneModel} a été chargé.` });
       } else {
         setSelectedDroneModel(DJI_MINI_4_PRO_PROFILE.name);
-        setCustomDroneParams(DJI_MINI_4_PRO_PROFILE);
+        const djiMini4Profile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
+        setCustomDroneParams({ maxWindSpeed: djiMini4Profile.maxWindSpeed, minTemp: djiMini4Profile.minTemp, maxTemp: djiMini4Profile.maxTemp });
       }
     } catch (error) {
       console.error("Erreur lors du chargement du drone par défaut depuis localStorage:", error);
@@ -133,7 +131,7 @@ export default function HomePage() {
     setCustomDroneParams(data);
     setSelectedDroneModel(DRONE_MODELS.CUSTOM);
     toast({ title: "Paramètres personnalisés sauvegardés", description: "Vos paramètres de drone personnalisés sont maintenant actifs." });
-    setIsSettingsOpen(false); // Close sheet after saving custom params
+    // setIsSettingsOpen(false); // Keep settings open if user wants to save this as default drone
   };
 
   const handleLocateMe = () => {
@@ -151,7 +149,7 @@ export default function HomePage() {
         handleCoordsChange(coords); 
         toast({ title: "Position trouvée!", description: "Météo pour votre position actuelle." });
         setIsLocating(false);
-        setIsSettingsOpen(false); // Close sheet after locating
+        // setIsSettingsOpen(false); // REMOVED: Keep settings sheet open
       },
       (error) => {
         let message = "Impossible d'obtenir la position.";
@@ -205,7 +203,8 @@ export default function HomePage() {
       return { name: DRONE_MODELS.CUSTOM, ...customDroneParams, notes: "Custom user parameters" };
     }
     const profile = DEFAULT_DRONE_PROFILES.find(p => p.name === selectedDroneModel);
-    return profile || { name: selectedDroneModel, ...customDroneParams, notes: "Default profile or custom values for a named drone." };
+    const fallbackProfile = DEFAULT_DRONE_PROFILES.find(p => p.name === DJI_MINI_4_PRO_PROFILE.name) || DJI_MINI_4_PRO_PROFILE;
+    return profile || { name: selectedDroneModel, ...customDroneParams, notes: "Default profile or custom values for a named drone." } as DroneProfile;
   }, [selectedDroneModel, customDroneParams]);
 
 
@@ -341,5 +340,3 @@ export default function HomePage() {
     </APIProvider>
   );
 }
-
-    
