@@ -1,8 +1,9 @@
 
 // src/app/api/uav-zones/route.ts
 import { NextResponse } from 'next/server';
-import type { Feature as GeoJSONFeature, FeatureCollection as GeoJSONFeatureCollection } from 'geojson';
+import type { Feature as GeoJSONFeature, FeatureCollection as GeoJSONFeatureCollection, Point as GeoJSONPoint } from 'geojson';
 import { parseISO, isWithinInterval, getDay } from 'date-fns';
+import SunCalc from 'suncalc';
 import type { GeneralTimeProperties, SpecificTimeProperties } from '@/types';
 
 const GEOMETRY_SERVICE_URL = 'https://services3.arcgis.com/om3vWi08kAyoBbj3/arcgis/rest/services/Geozone_Download_Prod/FeatureServer/0';
@@ -10,8 +11,13 @@ const SPECIFIC_TIME_SERVICE_URL = 'https://services3.arcgis.com/om3vWi08kAyoBbj3
 const GENERAL_TIME_SERVICE_URL = 'https://services3.arcgis.com/om3vWi08kAyoBbj3/arcgis/rest/services/General_Time_Download_Prod/FeatureServer/0';
 
 async function fetchArcGisFeatures(url: string, params: URLSearchParams): Promise<GeoJSONFeature[]> {
-  // console.log(`[API UAV fetchArcGisFeatures] Fetching from: ${url} with params: ${params.toString()}`);
-  const response = await fetch(`${url}/query?${params.toString()}`);
+  const queryString = params.toString();
+  const fullUrl = `${url}/query?${queryString}`; // Construisez l'URL complète
+
+  // Loggez l'URL qui va être appelée
+  console.log(`[API UAV fetchArcGisFeatures] Fetching from: ${fullUrl}`); // <<< VOTRE CONSOLE.LOG ICI
+
+  const response = await fetch(fullUrl);
   if (!response.ok) {
     const errorData = await response.text();
     console.error(`[API UAV fetchArcGisFeatures] ArcGIS API Error (${url}):`, response.status, errorData);
@@ -25,14 +31,38 @@ async function fetchArcGisFeatures(url: string, params: URLSearchParams): Promis
   return data.features || [];
 }
 
+// Helper function to parse ISO 8601 duration strings (simplified for H and M)
+export function parseISO8601Duration(durationString: string): number { // Added export
+  if (!durationString || !durationString.startsWith('PT')) {
+    return 0;
+  }
 
-function isZoneActive(
+  let hours = 0;
+  let minutes = 0;
+
+  const hourMatch = durationString.match(/(\d+)H/);
+  if (hourMatch) {
+    hours = parseInt(hourMatch[1], 10);
+  }
+
+  const minuteMatch = durationString.match(/(\d+)M/);
+  if (minuteMatch) {
+    minutes = parseInt(minuteMatch[1], 10);
+  }
+
+  return (hours * 60 * 60 * 1000) + (minutes * 60 * 1000);
+}
+
+export function isZoneActive( // Added export
   zoneFeature: GeoJSONFeature,
   generalTimeRules: GeneralTimeProperties[],
   specificTimeRules: SpecificTimeProperties[],
   targetDateTime: Date
 ): boolean {
-  const zoneId = zoneFeature.properties?.uidAmsl || zoneFeature.properties?.OBJECTID?.toString();
+  const zoneId = zoneFeature.properties?.ParentID as string; 
+  if (!zoneId) {
+    return false;
+  }
   const zoneName = zoneFeature.properties?.name || 'Unknown Name';
 
   // Décommentez les logs suivants pour un débogage détaillé
@@ -83,11 +113,81 @@ function isZoneActive(
 
     // TODO: Implémenter la logique sunrise/sunset.
     // Pour l'instant, on saute les règles qui en dépendent pour éviter une évaluation incorrecte.
-    if (rule.sunrise === 'start' || rule.sunset === 'stop' || 
+    // Check for sunrise/sunset rules
+    if (rule.sunrise === 'start' || rule.sunset === 'stop' ||
         (rule.writtenStartTime && typeof rule.writtenStartTime === 'string' && rule.writtenStartTime.toLowerCase().includes('sunrise')) ||
         (rule.writtenEndTime && typeof rule.writtenEndTime === 'string' && rule.writtenEndTime.toLowerCase().includes('sunset'))) {
-      // console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Rule depends on sunrise/sunset, which is not yet implemented. Skipping rule:`, rule);
-      continue; 
+
+      if (!zoneFeature.geometry || zoneFeature.geometry.type !== 'Point') {
+        console.warn(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': Rule depends on sunrise/sunset, but geometry is missing or not a Point. Skipping rule. Geometry:`, zoneFeature.geometry);
+        continue;
+      }
+
+      const coordinates = (zoneFeature.geometry as GeoJSONPoint).coordinates;
+      if (!coordinates || coordinates.length < 2) {
+        console.warn(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': Rule depends on sunrise/sunset, but coordinates are invalid. Skipping rule. Coordinates:`, coordinates);
+        continue;
+      }
+      const longitude = coordinates[0];
+      const latitude = coordinates[1];
+
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': Calculating SunCalc times for Lat=${latitude}, Lon=${longitude}, Date=${targetDateTime.toISOString()}`);
+      const sunTimes = SunCalc.getTimes(targetDateTime, latitude, longitude);
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': SunCalc Raw Times: Sunrise=${sunTimes.sunrise.toISOString()}, Sunset=${sunTimes.sunset.toISOString()}`);
+
+
+      // Case 1 & 2: Simple sunrise start or sunset stop
+      if (rule.sunrise === 'start') {
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': Rule sunrise='start'. Target: ${targetDateTime.toISOString()} >= Sunrise: ${sunTimes.sunrise.toISOString()}`);
+        if (targetDateTime >= sunTimes.sunrise) {
+          // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': PASSED Specific Rule (Sunrise Start). Zone IS ACTIVE.`);
+          return true;
+        }
+      } else if (rule.sunset === 'stop') {
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': Rule sunset='stop'. Target: ${targetDateTime.toISOString()} <= Sunset: ${sunTimes.sunset.toISOString()}`);
+        if (targetDateTime <= sunTimes.sunset) {
+          // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': PASSED Specific Rule (Sunset Stop). Zone IS ACTIVE.`);
+          return true;
+        }
+      } 
+      // Case 3: Interval between sunrise and sunset, potentially with offsets
+      else if (rule.writtenStartTime && typeof rule.writtenStartTime === 'string' && rule.writtenStartTime.toLowerCase().includes('sunrise') &&
+               rule.writtenEndTime && typeof rule.writtenEndTime === 'string' && rule.writtenEndTime.toLowerCase().includes('sunset')) {
+        
+        let effectiveSunrise = new Date(sunTimes.sunrise.getTime());
+        let effectiveSunset = new Date(sunTimes.sunset.getTime());
+
+        const startTimeParts = rule.writtenStartTime.split(/([+-])/); // e.g., ["sunrise", "+", "PT30M"]
+        if (startTimeParts.length === 3 && startTimeParts[0].toLowerCase() === 'sunrise' && startTimeParts[2]) {
+          const offset = parseISO8601Duration(startTimeParts[2]);
+          if (startTimeParts[1] === '+') {
+            effectiveSunrise = new Date(effectiveSunrise.getTime() + offset);
+          } else if (startTimeParts[1] === '-') {
+            effectiveSunrise = new Date(effectiveSunrise.getTime() - offset);
+          }
+        }
+
+        const endTimeParts = rule.writtenEndTime.split(/([+-])/); // e.g., ["sunset", "-", "PT1H"]
+        if (endTimeParts.length === 3 && endTimeParts[0].toLowerCase() === 'sunset' && endTimeParts[2]) {
+          const offset = parseISO8601Duration(endTimeParts[2]);
+          if (endTimeParts[1] === '+') {
+            effectiveSunset = new Date(effectiveSunset.getTime() + offset);
+          } else if (endTimeParts[1] === '-') {
+            effectiveSunset = new Date(effectiveSunset.getTime() - offset);
+          }
+        }
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': Rule sunrise/sunset interval. EffectiveSunrise=${effectiveSunrise.toISOString()}, EffectiveSunset=${effectiveSunset.toISOString()}, Target=${targetDateTime.toISOString()}`);
+        if (targetDateTime >= effectiveSunrise && targetDateTime <= effectiveSunset) {
+          // console.log(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': PASSED Specific Rule (Sunrise/Sunset Interval with Offsets). Zone IS ACTIVE.`);
+          return true;
+        }
+      } else {
+        // console.warn(`[isZoneActive Debug] Zone ID ${zoneId}, Name='${zoneName}': Unhandled sunrise/sunset rule configuration. Rule:`, rule);
+      }
+      // If a sunrise/sunset rule was processed but didn't lead to activation, continue to the next rule.
+      // This 'continue' is important because a zone might have multiple specific rules,
+      // and a non-matching sunrise/sunset rule shouldn't prevent other specific rules (like day or time) from activating the zone.
+      continue;
     }
 
     // Logique pour les jours de la semaine

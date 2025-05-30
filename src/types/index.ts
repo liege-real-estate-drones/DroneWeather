@@ -270,18 +270,31 @@ export interface SafetyAssessment {
 // Types pour ArcGIS UAV Zones
 export interface ArcGISFeatureProperties {
   OBJECTID?: number;
-  uidAmsl?: string;
-  name?: string;
-  categoryType?: string;
-  status?: string; // Expected to be "validated" by service query
-  lowerAltitudeReference?: string;
-  upperAltitudeReference?: string;
-  lowerLimit?: number | string;
-  upperLimit?: number | string;
-  restriction?: string;
-  reason?: string;
-  additionalInfo?: string;
-  type?: string; 
+  GlobalID?: string; // Ajouté
+  name?: string | null;
+  categoryType?: string | null;
+  priority?: string | null; // Ajouté
+  ParentID?: string | null; // Important pour le lien avec les règles de temps si uidAmsl n'est pas directement sur cette couche.
+  code?: string | null; // Ajouté
+  status?: string | null;
+  // centerpoint, range, latitude, longitude sont des strings, pourraient être utiles
+  lowerAltitudeReference?: string | null;
+  upperAltitudeReference?: string | null;
+  lowerAltitudeUnit?: string | null; // Ajouté
+  upperAltitudeUnit?: string | null; // Ajouté
+  lowerLimit?: number | null;      // CHANGÉ: esriFieldTypeDouble, nullable: true
+  upperLimit?: number | null;      // CHANGÉ: esriFieldTypeDouble, nullable: true
+  reason?: string | null;
+  restriction?: string | null;
+  OtherReasonInfo?: string | null; // Ajouté
+  extendedProperties?: string | null; // Ajouté
+  last_version?: string | null; // Ajouté
+  additionalInfo?: string | null; // (alias: Remarks)
+  categories?: string | null; // Ajouté
+  // uidAmsl?: string; // Ce champ est-il directement dans Geozone_Prod ou est-ce ParentID/OBJECTID qui sert de lien ?
+                       // Votre code isZoneActive utilise: zoneFeature.properties?.uidAmsl || zoneFeature.properties?.OBJECTID?.toString()
+                       // Assurez-vous que le champ utilisé pour lier aux ParentID/childID des règles de temps est bien présent et correct.
+  // Le champ 'type' que vous aviez avant n'est pas listé, il correspond peut-être à 'categoryType'.
   [key: string]: any;
 }
 
@@ -297,17 +310,20 @@ export interface GeneralTimeProperties {
 }
 
 export interface SpecificTimeProperties {
-  ParentID?: string;
-  childID?: string;
-  startTime?: number; 
-  endTime?: number; 
-  TimeUnit?: string; // ex: "PERMANENT", "DAY", "WEEK", "MONTH", "utc"
-  days?: string; // ex: "1,2,3,4,5"
-  status?: string; // Expected to be "validated"
-  sunrise?: string; // "start", "stop", null
-  sunset?: string; // "start", "stop", null
-  writtenStartTime?: string; // "HH.MM.SS" or null
-  writtenEndTime?: string; // "HH.MM.SS" or null
-  name?: string;
-  [key: string]: any;
+  OBJECTID?: number;
+  GlobalID?: string;
+  ParentID?: string | null;
+  childID?: string | null;
+  startTime?: number | null;
+  endTime?: number | null;
+  TimeUnit?: string | null; // Par ex. "DAY", "HR", ou null
+  last_version?: string | null; // La viewDefinitionQuery utilise (last_version = 'yes')
+  days?: string | null;
+  status?: string | null;
+  sunrise?: string | null;
+  sunset?: string | null;
+  writtenStartTime?: string | null;
+  writtenEndTime?: string | null;
+  name?: string | null;
+  // ... autres champs si nécessaire ...
 }
