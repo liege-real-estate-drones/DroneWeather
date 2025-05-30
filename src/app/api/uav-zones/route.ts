@@ -51,8 +51,9 @@ function isZoneActive(
   // 1. Vérifier les règles générales permanentes
   for (const rule of relevantGeneralRules) {
     // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking General Rule (Permanent):`, rule);
+    // ArcGIS service query already filters for status='validated' and last_version='yes'
     if (rule.permanent === '1') {
-      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED General Rule (Permanent). Zone IS ACTIVE.`);
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED General Rule (Permanent based on 'permanent: "1"'). Zone IS ACTIVE.`);
       return true;
     }
   }
@@ -60,7 +61,9 @@ function isZoneActive(
   // 2. Vérifier les règles générales avec date/heure de début/fin
   for (const rule of relevantGeneralRules) {
     // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking General Rule (Date/Time Interval):`, rule);
-    if (rule.startDateTime && rule.endDateTime) {
+    // ArcGIS service query already filters for status='validated' and last_version='yes'
+    // Only check interval if not explicitly permanent (permanent !== '1')
+    if (rule.permanent !== '1' && rule.startDateTime && rule.endDateTime) {
       try {
         const interval = { start: new Date(rule.startDateTime), end: new Date(rule.endDateTime) };
         // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Interval: Start=${interval.start.toISOString()}, End=${interval.end.toISOString()}`);
@@ -77,32 +80,30 @@ function isZoneActive(
   // 3. Vérifier les règles spécifiques
   for (const rule of relevantSpecificRules) {
     // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Checking Specific Rule:`, rule);
+    // ArcGIS service query already filters for status='validated' and last_version='yes'
 
     // TODO: Implement sunrise/sunset logic.
     // This will require integrating a weather API or an astronomical calculation library
     // to determine the actual sunrise and sunset times for the zone's location and the targetDate.
     // The current implementation only handles fixed times and permanent rules.
     // Example of how it might be structured:
-    // if (rule.TimeReference === 'SUNRISE' || rule.TimeReference === 'SUNSET') {
+    // if (rule.sunrise === 'start' || rule.sunset === 'stop' || rule.writtenStartTime?.includes('sunrise') || rule.writtenEndTime?.includes('sunset')) {
     //   // Fetch/calculate sunrise/sunset times for zone's location & targetDateTime
     //   // Adjust rule.writtenStartTime/writtenEndTime based on offsets (e.g., SUNRISE+30 min)
     //   // Then proceed with the time comparison logic below
+    //   console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Rule depends on sunrise/sunset, not yet implemented. Rule:`, rule);
+    //   continue; // Skip rules dependent on sunrise/sunset for now
     // }
 
     // Logique pour les jours de la semaine
     if (rule.days) {
-      const activeDaysSkeyes = rule.days.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d)); // Parse to int, filter out NaN
-      let targetDaySkeyes = getDay(targetDateTime); // date-fns: 0 (Sun) to 6 (Sat)
+      const activeDaysSkeyes = rule.days.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d));
+      let targetDayFromDateFns = getDay(targetDateTime); // date-fns: 0 (Sun) to 6 (Sat)
+      
+      // Convert targetDayFromDateFns (0-6, Sun-Sat) to Skeyes convention (1-7, Mon-Sun)
+      const targetDaySkeyes = (targetDayFromDateFns === 0) ? 7 : targetDayFromDateFns;
 
-      // Convert targetDay to Skeyes convention (1=Mon, ..., 7=Sun)
-      if (targetDaySkeyes === 0) { // Sunday
-        targetDaySkeyes = 7;
-      }
-      // For Mon-Sat (1-6), date-fns getDay() is already aligned if we consider 1=Mon.
-      // Skeyes: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
-      // date-fns: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
-
-      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Day Check: RuleDays=${rule.days}, ActiveDaysSkeyes=${activeDaysSkeyes}, TargetDaySkeyes=${targetDaySkeyes}`);
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Day Check: RuleDaysSkeyes=${rule.days}, ParsedActiveDaysSkeyes=${activeDaysSkeyes}, TargetDaySkeyes=${targetDaySkeyes}`);
       if (!activeDaysSkeyes.includes(targetDaySkeyes)) {
         // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule day mismatch. Skipping.`);
         continue; // Pas actif ce jour-là
@@ -110,11 +111,11 @@ function isZoneActive(
       // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule day MATCHED.`);
     }
 
-    if (rule.writtenStartTime && rule.writtenEndTime) {
-      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Time Check: StartTime=${rule.writtenStartTime}, EndTime=${rule.writtenEndTime}`);
+    if (rule.writtenStartTime && rule.writtenEndTime && typeof rule.writtenStartTime === 'string' && typeof rule.writtenEndTime === 'string') {
+      // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule Time Check: StartTime='${rule.writtenStartTime}', EndTime='${rule.writtenEndTime}'`);
       try {
-        const startTimeParts = rule.writtenStartTime.split('.');
-        const endTimeParts = rule.writtenEndTime.split('.');
+        const startTimeParts = rule.writtenStartTime.split('.'); // Expect "HH.MM.SS" or "HH.MM"
+        const endTimeParts = rule.writtenEndTime.split('.');   // Expect "HH.MM.SS" or "HH.MM"
 
         if (startTimeParts.length < 2 || endTimeParts.length < 2) {
           console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format (not enough parts) in specific rule:`, rule);
@@ -130,20 +131,20 @@ function isZoneActive(
         // const endSecond = endTimeParts.length > 2 ? parseInt(endTimeParts[2], 10) : 0; // Seconds are not used in current logic
 
         if (isNaN(startHour) || isNaN(startMinute) || isNaN(endHour) || isNaN(endMinute)) {
-          console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format (NaN) in specific rule:`, rule);
+          console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Invalid time format (NaN after parsing parts) in specific rule:`, rule);
           continue;
         }
 
-        const targetHour = targetDateTime.getHours();
-        const targetMinute = targetDateTime.getMinutes();
+        const targetHour = targetDateTime.getUTCHours(); // Use UTC hours for comparison if times are UTC
+        const targetMinute = targetDateTime.getUTCMinutes();
 
         const targetTimeInMinutes = targetHour * 60 + targetMinute;
         const startTimeInMinutes = startHour * 60 + startMinute;
         let endTimeInMinutes = endHour * 60 + endMinute;
         
-        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: TargetTime(min)=${targetTimeInMinutes}, StartTime(min)=${startTimeInMinutes}, EndTime(min)=${endTimeInMinutes}`);
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: TargetTimeUTC(min)=${targetTimeInMinutes}, StartTime(min)=${startTimeInMinutes}, EndTime(min)=${endTimeInMinutes}`);
         
-        if (endTimeInMinutes < startTimeInMinutes) { // Handle case where end time is on the next day
+        if (endTimeInMinutes < startTimeInMinutes) { // Handle case where end time is on the next day (e.g. 22:00 - 02:00)
           if (targetTimeInMinutes >= startTimeInMinutes || targetTimeInMinutes <= endTimeInMinutes) {
             // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (Time, Cross-Midnight). Zone IS ACTIVE.`);
             return true;
@@ -155,14 +156,14 @@ function isZoneActive(
           }
         }
       } catch (e) {
-        console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Error parsing specific rule time:`, rule, e);
+        console.warn(`[isZoneActive Debug] Zone ID ${zoneId}: Error parsing specific rule time string:`, rule.writtenStartTime, rule.writtenEndTime, e);
       }
     } else if (rule.TimeUnit === 'PERMANENT') {
         // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (TimeUnit=PERMANENT). Zone IS ACTIVE.`);
         return true;
     }
-    else if (rule.days && !rule.writtenStartTime && !rule.writtenEndTime) {
-        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (Day Match, No Time Specified). Zone IS ACTIVE.`);
+    else if (rule.days && (!rule.writtenStartTime || !rule.writtenEndTime)) { // If days match and no specific time, assume active all day
+        // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: PASSED Specific Rule (Day Match, No Time Specified, assuming active all day). Zone IS ACTIVE.`);
         return true;
     }
     // console.log(`[isZoneActive Debug] Zone ID ${zoneId}: Specific Rule did not result in activation.`);
